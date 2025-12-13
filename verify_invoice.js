@@ -1,0 +1,65 @@
+const InvoiceHelper = require('./src/utils/invoiceHelper');
+const pdf = require('html-pdf-node');
+const fs = require('fs');
+const path = require('path');
+
+const mockBooking = {
+    invoiceNumber: 'INV-2024-001',
+    createdAt: new Date(),
+    bookingId: 'BK-123456',
+    paymentStatus: 'Paid',
+    bookingStatus: 'Confirmed',
+    customerName: 'John Doe',
+    mobileNumber: '+91-9876543210',
+    email: 'john.doe@example.com',
+    userType: 'App User',
+    bookingType: 'Package',
+    travelStartDate: new Date('2024-12-01'),
+    travelEndDate: new Date('2024-12-05'),
+    durationInDays: 5,
+    numberOfTravelers: 2,
+    selectedPackageId: {
+        title: 'Amazing Goa Trip',
+        basePricePerPerson: 15000,
+        childPrice: 8000
+    },
+    adults: 2,
+    children: 0,
+    packageCostPerPerson: 15000,
+    totalAmount: 30000,
+    discountAmount: 0,
+    finalAmount: 30000,
+    addOnsTotal: 0,
+    paymentMethod: 'UPI',
+    transactionId: 'TXN123456789',
+    travelerDetails: [
+        { name: 'John Doe', age: 30, gender: 'Male' },
+        { name: 'Jane Doe', age: 28, gender: 'Female' }
+    ]
+};
+
+async function generateTestInvoice() {
+    try {
+        console.log('Generating invoice HTML...');
+        const html = InvoiceHelper.getInvoiceHTML(mockBooking);
+
+        console.log('Generating PDF...');
+        const file = { content: html };
+        const options = {
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
+        };
+
+        const pdfBuffer = await pdf.generatePdf(file, options);
+
+        const outputPath = path.join(__dirname, 'test_invoice.pdf');
+        fs.writeFileSync(outputPath, pdfBuffer);
+
+        console.log(`Invoice generated successfully at: ${outputPath}`);
+    } catch (error) {
+        console.error('Error generating invoice:', error);
+    }
+}
+
+generateTestInvoice();
