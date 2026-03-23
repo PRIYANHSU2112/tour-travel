@@ -1,3 +1,4 @@
+// require("./utils/logger");
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
@@ -36,6 +37,8 @@ const guideRoutes = require('./routes/guideRoutes')
 const razorpayRoutes = require('./routes/razorpayRoutes')
 const galleryRoutes = require('./routes/galleryRoutes')
 const distributorRoutes = require('./routes/distributorRoutes');
+const razorpayTestRoutes = require('./razorpay-test/routes');
+
 
 const app = express();
 
@@ -71,6 +74,7 @@ app.use('/api/guide', guideRoutes)
 app.use('/api/razorpay', razorpayRoutes)
 app.use('/api/gallery', galleryRoutes)
 app.use('/api/distributor', distributorRoutes);
+app.use('/api/razorpay-test', razorpayTestRoutes);
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/benefits', require('./routes/benefitRoutes'));
@@ -87,6 +91,8 @@ app.use('/api/rewards', require('./routes/rewardRoutes'));
 //     res.status(500).json({ success:false, message: error.message });
 //   }
 // });
+
+app.use('/api/test', require('./routes/testRoutes'));
 
 connectDB();
 

@@ -2,18 +2,18 @@ const nodemailer = require("nodemailer");
 
 class EmailService {
   constructor() {
-    if (!process.env.EMAIL_USER && !process.env.SMARTCLINIC_EMAIL_USER) {
-      console.error("WARNING: EMAIL_USER not configured");
-    }
-    if (!process.env.EMAIL_PASS && !process.env.SMARTCLINIC_EMAIL_PASS) {
-      console.error("WARNING: EMAIL_PASS not configured");
-    }
+    // if (!process.env.EMAIL_USER && !process.env.SMARTCLINIC_EMAIL_USER) {
+    //   console.error("WARNING: EMAIL_USER not configured");
+    // }
+    // if (!process.env.EMAIL_PASS && !process.env.SMARTCLINIC_EMAIL_PASS) {
+    //   console.error("WARNING: EMAIL_PASS not configured");
+    // }
 
     this.transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER || process.env.SMARTCLINIC_EMAIL_USER,
-        pass: process.env.EMAIL_PASS || process.env.SMARTCLINIC_EMAIL_PASS,
+        user: process.env.EMAIL_USER || process.env.SMARTCLINIC_EMAIL_USER ||"zunzarraoyatra@gmail.com",
+        pass: process.env.EMAIL_PASS || process.env.SMARTCLINIC_EMAIL_PASS || "lethqvszmvetbsnv",
       },
     });
 
@@ -178,7 +178,7 @@ body {
       }
 
       const mailOptions = {
-        from: process.env.EMAIL_USER || process.env.SMARTCLINIC_EMAIL_USER,
+        from: process.env.EMAIL_USER || process.env.SMARTCLINIC_EMAIL_USER || "zunzarraoyatra@gmail.com",
         to,
         subject: "Payment Successful - Booking Confirmation",
         html,

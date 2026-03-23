@@ -30,24 +30,25 @@ router.get("/agent-pay/transactions/:agentId", protect, getAgentPaidTransactions
 router.post("/:userId", createBookingsFromCart);
 
 
+// Route: GET /invoice
 router.get('/invoice', async (req, res) => {
-  const bookingId = req.query.bookingId;
+  const { id } = req.query;
+  console.log("hit ====================== ===");
 
-  try {
-    const booking = await bookingModel.findOne({ bookingId: bookingId }); // your DB model
-    if (!booking || !booking.invoiceUrl) {
-      return res.status(404).send('Invoice not found');
-    }
-
-    console.log("BookingUrl:", booking.invoiceUrl);
-
-    // Redirects to your DigitalOcean PDF URL
-    res.redirect(302, booking.invoiceUrl);
-
-  } catch (error) {
-    console.error("Redirect error:", error);
-    res.status(500).send('Something went wrong');
+  if (!id) {
+    return res.status(400).json({ message: "Invoice ID required" });
   }
+
+  // API hit karo
+  const response = await axios.get(
+    `https://api.zunjarraoyatra.com/api/checkout/invoice?bookingId=${id}`
+  );
+
+  // invoiceUrl nikalo response se
+  const invoiceUrl = response.data.invoiceUrl; //  field name confirm karo
+
+  // S3 PDF pe redirect karo
+  return res.redirect(invoiceUrl);
 });
 
 module.exports = router;

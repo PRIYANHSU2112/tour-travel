@@ -45,17 +45,19 @@ const axios = require("axios");
 // 1114069913554859546
 const sendBookingSMS = async (mobile,name, bookingId, invoiceLink) => {
   console.log("=============",mobile,name, bookingId, invoiceLink);
-  try {
+  try { 
     // const invoiceId = 123456789;
-    console.log("Booking ID:", bookingId);
-    const url = `https://api.zunjarraoyatra.com/api/checkout/invoice?bookingId=${bookingId}`;
-    console.log("URL:", url);
+    const url = `https://zunjarrao.com/invoice?id=${bookingId}`;
+    console.log("url",url);
+    const cleanMobile = mobile.toString().replace(/\D/g, ''); // Removes '+' and spaces
+    const finalMobile = cleanMobile.startsWith('91') ? cleanMobile : `91${cleanMobile}`;
+    
     const response = await axios.get(
       "https://api.msg91.com/api/sendhttp.php",
       {
         params: {
-          authkey: process.env.MSG_KEY,
-          mobiles: `91${mobile}`,
+          authkey: process.env.MSG_KEY || "441431AI59GlvFlw69aaa86dP1",
+          mobiles: finalMobile,
           message: `Hello ${name}, your booking ${bookingId} has been confirmed for ${url}. Thank you for choosing our service. -ZUNJARRAO YATRA LLP`,
           sender: "ZNYTRA",
           route: "4",

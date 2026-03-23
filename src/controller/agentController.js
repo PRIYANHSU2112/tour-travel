@@ -101,7 +101,6 @@ class AgentController {
         finalFilter = searchFilter;
       }
     }
-
     const query = this.model.find(finalFilter).populate({
       path: 'createdBy',
       select: 'firstName lastName role'

@@ -1,11 +1,11 @@
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-core");
 const InvoiceHelper = require("../utils/invoiceHelper");
 const { s3Client } = require("../middleware/s3Upload");
 const { PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 
 class InvoiceService {
   constructor() {
-    this.bucketName = process.env.LINODE_OBJECT_BUCKET || "leadkart";
+    this.bucketName = process.env.LINODE_OBJECT_BUCKET;
   }
 
   async generateInvoice(booking) {
@@ -24,11 +24,18 @@ class InvoiceService {
   }
 
   async generatePDFBuffer(booking) {
+    let browser;
     try {
-      const html = InvoiceHelper.getInvoiceHTML(booking);
+      const html = typeof booking === "string" ? booking : InvoiceHelper.getInvoiceHTML(booking);
 
-      const browser = await puppeteer.launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      browser = await puppeteer.launch({
+        executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium-browser",
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+        ],
       });
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "networkidle0" });
@@ -42,6 +49,7 @@ class InvoiceService {
       await browser.close();
       return pdfBuffer;
     } catch (error) {
+      if (browser) await browser.close().catch(() => {});
       console.error("Error generating PDF buffer:", error);
       throw error;
     }

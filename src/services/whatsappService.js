@@ -50,7 +50,8 @@ class WhatsAppService {
       campaignName: templateName, // ✅ exact template name
       destination: phone,
       userName: userName,
-      templateParams: variables
+      templateParams: variables,
+      source: "api"
     });
   }
 
@@ -60,6 +61,7 @@ class WhatsAppService {
       apiKey: this.apiKey,
       destination: phone,
       userName: userName,
+      source: "api",    
       media: {
         url: link,
         filename: filename
