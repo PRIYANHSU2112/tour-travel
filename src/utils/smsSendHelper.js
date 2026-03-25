@@ -47,7 +47,7 @@ const sendBookingSMS = async (mobile,name, bookingId, invoiceLink) => {
   console.log("=============",mobile,name, bookingId, invoiceLink);
   try { 
     // const invoiceId = 123456789;
-    const url = `https://zunjarrao.com/invoice?id=${bookingId}`;
+    const url = `https://api.zunjarraoyatra.com/api/checkout/invoice?id=${bookingId}`;
     console.log("url",url);
     const cleanMobile = mobile.toString().replace(/\D/g, ''); // Removes '+' and spaces
     const finalMobile = cleanMobile.startsWith('91') ? cleanMobile : `91${cleanMobile}`;

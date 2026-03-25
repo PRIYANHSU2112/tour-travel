@@ -30,7 +30,7 @@ const invoiceService = new InvoiceService();
 const whatsappService = new WhatsAppService();
 
 const createBookingsFromCart = async (req, res) => {
-  console.log(process.env.RAZORPAY_KEY_SECRET);
+  // console.log(process.env.RAZORPAY_KEY_SECRET);
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -78,6 +78,7 @@ const createBookingsFromCart = async (req, res) => {
         new mongoose.Types.ObjectId(packageId),
       );
     }
+    // console.log("packageData"+packageData);
 
     if (tourId) {
       tourData = await tourModel.findById(new mongoose.Types.ObjectId(tourId));
@@ -134,13 +135,30 @@ const createBookingsFromCart = async (req, res) => {
         (sum, addOn) => sum + addOn.price,
         0,
       );
-      console.log(addOnsTotal);
+      // console.log(addOnsTotal);
       const quantity = 1;
 
-      const totalAmount =
-        (basePrice * adults + childPrice * children + addOnsTotal) * quantity;
+      // Group Discount Calculation
+      let calculatedDiscountAmount = 0;
 
-      console.log(totalAmount);
+      if (packageData && packageData.groupDiscounts && packageData.groupDiscounts.length > 0) {
+        // Find highest applicable discount based on minPersons (Adults only)
+        const applicableDiscounts = packageData.groupDiscounts
+          .filter(d => adults >= d.minPersons)
+          .sort((a, b) => b.minPersons - a.minPersons);
+
+        if (applicableDiscounts.length > 0) {
+          const discountPercent = applicableDiscounts[0].discountPercent;
+          // Apply discount on the base tour price (excluding addons)
+          const baseTourCost = (basePrice * adults + childPrice * children) * quantity;
+          calculatedDiscountAmount = (baseTourCost * discountPercent) / 100;
+        }
+      }
+
+      const totalAmount =
+        (basePrice * adults + childPrice * children + addOnsTotal) * quantity - calculatedDiscountAmount;
+
+      // console.log("Discount Amount:", calculatedDiscountAmount, "Total:", totalAmount);
       const travelEndDate = new Date(checkInDate);
       travelEndDate.setDate(travelEndDate.getDate() + duration);
 
@@ -170,7 +188,8 @@ const createBookingsFromCart = async (req, res) => {
         specialRequests: customerInfo.specialRequests || "",
         paymentStatus: "Pending",
         bookingStatus: "Pending",
-        totalAmount: totalAmount,
+        totalAmount: totalAmount, // Note: Model pre-save will recompute totalAmount, finalAmount and taxAmount
+        discountAmount: calculatedDiscountAmount,
         createdBy: userId,
         assignedAgent: assignedAgent,
         gstNumber: companyGstNumber,
@@ -181,11 +200,11 @@ const createBookingsFromCart = async (req, res) => {
       bookings.push(newBooking);
       // }
     }
-    console.log(bookings);
+    // console.log(bookings);
     const totalAmount = bookings.reduce((sum, b) => sum + b.finalAmount, 0);
     console.log("last amount", totalAmount);
     const razorpayOrderOptions = {
-      amount: totalAmount * 100,
+      amount: Math.round(totalAmount * 100),
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
 
@@ -834,6 +853,14 @@ const confirmPayment = async (req, res) => {
         const agent = await agentModel.findOne({ userId: booking.assignedAgent }).session(session);
         if (!agent) continue;
 
+        // Increment totalBookingsHandled
+        await agentModel.findOneAndUpdate(
+          { userId: booking.assignedAgent },
+          { $inc: { totalBookingsHandled: 1 } },
+          { session }
+        );
+
+
         let distributor = null;
         if (agent.createdBy) {
           distributor = await userModel.findById(agent.createdBy).session(session);
@@ -925,11 +952,16 @@ const confirmPayment = async (req, res) => {
         console.log(`[Background] Starting for order: ${razorpay_order_id}`);
 
         const freshOrder = await orderModel.findOne({ orderId: razorpay_order_id });
-        if (!freshOrder) return console.error("[Background] ❌ Order not found");
+        if (!freshOrder) return console.error("[Background]  Order not found");
 
         const bookings = await bookingModel
           .find({ bookingId: { $in: freshOrder.bookingIds } })
-          .populate("selectedPackageId")
+          .populate({
+            path: "selectedPackageId",
+            populate: {
+              path: "itinerary.placeIds"
+            }
+          })
           .populate("selectedTourId")
           .populate("cityId")
           .populate("assignedAgent", "firstName lastName email");
@@ -982,7 +1014,7 @@ const confirmPayment = async (req, res) => {
             console.log(`[Background] ✅ ${booking.bookingId} — WA: ${wa.status}${wa.reason ? ' (' + wa.reason + ')' : ''} | SMS: ${sms.status}${sms.reason ? ' (' + sms.reason + ')' : ''} | Email: ${email.status}${email.reason ? ' (' + email.reason + ')' : ''}`);
 
             // 3. Itinerary email separately
-            if (booking.email && (booking.selectedPackageId || booking.selectedTourId)) {
+            if (booking.email && booking.bookingType === "Package Tour" && booking.selectedPackageId) {
               console.log(`[Background] 📤 Sending itinerary email to ${booking.email}...`);
               await emailService.sendItineraryEmail(booking.email, booking);
               console.log(`[Background] ✅ Itinerary email sent`);

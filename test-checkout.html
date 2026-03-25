@@ -22,7 +22,7 @@
     <p style="color: #666; font-size: 14px;">This file specifically tests your actual backend APIs <code>/:userId</code> and <code>/verify</code> with the provided static "John Doe" payload.</p>
     
     <label><strong>Backend API URL:</strong></label>
-    <input type="text" id="apiUrl" value="https://api.zunjarraoyatra.com/api/"> 
+    <input type="text" id="apiUrl" value="http://localhost:14000/api/"> 
 
     <!-- https://api.zunjarraoyatra.com/api/ -->
      <!-- http://localhost:14000/api/ -->
@@ -47,21 +47,33 @@
     const staticPayload = {
         "customerInfo": {
             "name": "John Doe",
-            "phone": "+919685955475",
+            "phone": "+918435837006",
             "email": "sahujipriyanshu2112@gmail.com",
             "specialRequests": "Need wheelchair accessible rooms and vegetarian meals"
         },
         "userId": "69bcf38ad9a4c371e2be1367",
-        "packageId": "69bcf83bdf4dd8948c358d7f",
-        "selectedAddOns": [],
+        // "packageId": "69c265a1fa308727a999a538",
+        "tourId": "69c263182ecccf94cac4f6e5",
+        "selectedAddOns": [
+            {
+                "name": "Extra Bed",
+                "price": 500,
+                "description": "Additional single bed in the room"
+            },
+            {
+                "name": "Airport Transfer",
+                "price": 1200,
+                "description": "Pickup and drop from the airport"
+            }
+        ],
         "selectedSeats": ["2-L", "3-L", "4-L"],
         "adults": 2,
         "children": 1,
-        "checkInDate": "2026-03-20T00:00:00.000",   
+        "checkInDate": "2026-03-30T00:00:00.000",   
         "travelerDetailsMap": [
             {
                 "name": "John Doe",
-                "age": 35,
+                "age": 35,  
                 "gender": "Male",
                 "idProofType": "Passport",
                 "idProofNumber": "P1234567",
@@ -79,7 +91,7 @@
             },
             {
                 "name": "Tommy Doe",
-                "age": 8,
+                "age": 2,
                 "gender": "Male",
                 "idProofType": "Birth Certificate",
                 "idProofNumber": "BC123456",

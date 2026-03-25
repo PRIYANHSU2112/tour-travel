@@ -590,23 +590,30 @@ margin-bottom:28px;
 thead{
 background:var(--deep);
 color:white;
+
 }
 
 th{
 padding:12px;
 font-size:11px;
 text-transform:uppercase;
+text-align: left;
 }
 
 td{
 padding:13px;
 border-bottom:1px solid var(--border);
 font-size:13px;
+text-align: left;
 }
 
 td:last-child{
 text-align:right;
 }
+
+th.text-center, td.text-center { text-align: center; }
+th.text-right, td.text-right { text-align: right; }
+th.text-left, td.text-left { text-align: left; }
 
 .totals-section{
 display:flex;
@@ -654,7 +661,6 @@ color:var(--saffron);
 
 <div class="invoice-wrapper">
 
-<!-- HEADER -->
 <div class="invoice-header">
 
 <div>
@@ -720,10 +726,10 @@ color:var(--saffron);
 <span>{{mobileNumber}}</span>
 </div>
 
-<div class="info-row">
+<!-- <div class="info-row">
 <span>User Type</span>
 <span>{{userType}}</span>
-</div>
+</div> -->
 
 </div>
 
@@ -742,12 +748,12 @@ color:var(--saffron);
 </div>
 
 <div class="info-row">
-<span>Tour Package</span>
 <span>{{bookingType}}</span>
+<span>{{bookingName}}</span>
 </div>
 
 <div class="info-row">
-<span>Travel Mode</span>
+<span>Payment Method</span>
 <span>{{paymentMethod}}</span>
 </div>
 
@@ -763,15 +769,22 @@ color:var(--saffron);
 
 <div>
 
-<div class="tour-name">{{bookingType}}</div>
+<div class="tour-name">{{bookingName}}</div>
 
+{{#if showTravelDates}}
 <div class="tour-route">
 {{travelStartDate}} → {{travelEndDate}}
 </div>
+{{/if}}
 
 <div class="tour-tags">
 
+  {{#if durationInDays}}
 <span class="tour-tag">{{durationInDays}} Days</span>
+{{/if}}
+{{#if durationInNight}}
+<span class="tour-tag">{{durationInNight}} Nights</span>
+{{/if}}
 
 <span class="tour-tag">{{numberOfTravelers}} Travelers</span>
 
@@ -791,10 +804,10 @@ color:var(--saffron);
 
 <thead>
 <tr>
-<th>#</th>
-<th>Traveller Name</th>
-<th>Age</th>
-<th>Gender</th>
+<th style="width: 50px;" class="text-center">#</th>
+<th class="text-left">Traveller Name</th>
+<th class="text-center">Age</th>
+<th class="text-right">Gender</th>
 </tr>
 </thead>
 
@@ -816,40 +829,39 @@ color:var(--saffron);
 
 <thead>
 <tr>
-<th>Description</th>
-<th>Qty</th>
-<th>Price</th>
-<th>Total</th>
+<th class="text-left">Description</th>
+<th class="text-center">Qty</th>
+<th class="text-right">Price</th>
+<th class="text-right">Total</th>
 </tr>
 </thead>
 
 <tbody>
 
 <tr>
-<td>Adult</td>
-<td>{{adultCount}}</td>
-<td>₹{{adultPrice}}</td>
-<td>₹{{adultTotal}}</td>
+<td class="text-left">{{adultLabel}}</td>
+<td class="text-center">{{adultCount}}</td>
+<td class="text-right">₹{{adultPrice}}</td>
+<td class="text-right">₹{{adultTotal}}</td>
 </tr>
 
-{{#if childCount}}
 
+{{#if hasChild}}
 <tr>
-<td>Child</td>
-<td>{{childCount}}</td>
-<td>₹{{childPrice}}</td>
-<td>₹{{childTotal}}</td>
+<td class="text-left">Child</td>
+<td class="text-center">{{childCount}}</td>
+<td class="text-right">₹{{childPrice}}</td>
+<td class="text-right">₹{{childTotal}}</td>
 </tr>
-
 {{/if}}
 
 {{#if addOns}}
 
 <tr>
-<td>Add-ons</td>
-<td>-</td>
-<td>-</td>
-<td>₹{{addOnsTotal}}</td>
+<td class="text-left">Add-ons</td>
+<td class="text-center">-</td>
+<td class="text-right">-</td>
+<td class="text-right">₹{{addOnsTotal}}</td>
 </tr>
 
 {{/if}}
@@ -867,6 +879,8 @@ color:var(--saffron);
 <div class="totals-row">
 <span>Subtotal</span>
 <span>₹{{totalAmount}}</span>
+<span>{{taxPercent}}%</span>
+<span>₹{{taxAmount}}</span>
 </div>
 
 {{#if hasDiscount}}
@@ -895,7 +909,7 @@ color:var(--saffron);
 
 <div>
 
-📞 +91 98765 43210  
+📞 +91 866 851 7783
 <br>
 ✉ info@zunjarraoyta.com  
 <br>

@@ -21,7 +21,8 @@ class WhatsAppService {
 
     // 🟢 TEMPLATE
     if (options.templateName) {
-      return this.sendTemplate(formattedPhone, options.templateName, options.variables, userName);
+      console.log("Sending template...");
+      return this.sendTemplate(formattedPhone, options.variables, userName);
     }
 
     // 🟢 DOCUMENT
@@ -44,12 +45,13 @@ class WhatsAppService {
   }
 
   // 🟢 TEMPLATE MESSAGE
-  sendTemplate(phone, templateName, variables = [], userName = "Customer") {
+  sendTemplate(phone, variables = [], userName = "Customer") {
+    const safeUserName = (userName || "Customer").replace(/[^a-zA-Z0-9 ]/g, "").trim() || "Customer";
     return this.request({
       apiKey: this.apiKey,
-      campaignName: templateName, // ✅ exact template name
+      campaignName: "zn_booking", // exact template name
       destination: phone,
-      userName: userName,
+      userName: safeUserName,
       templateParams: variables,
       source: "api"
     });
@@ -57,24 +59,25 @@ class WhatsAppService {
 
   // 🟢 DOCUMENT (PDF)
   sendDocument(phone, link, filename = "Invoice.pdf", campaignName, userName = "Customer", variables = []) {
+    const safeUserName = (userName || "Customer").replace(/[^a-zA-Z0-9 ]/g, "").trim() || "Customer";
     const payload = {
       apiKey: this.apiKey,
       destination: phone,
-      userName: userName,
-      source: "api",    
+      userName: safeUserName,
+      source: "api",
       media: {
         url: link,
         filename: filename
       }
     };
-    
+
     if (campaignName) {
       payload.campaignName = campaignName;
       if (variables && variables.length > 0) {
         payload.templateParams = variables;
       }
     }
-    
+
     return this.request(payload);
   }
 

@@ -49,10 +49,10 @@ class InvoiceHelper {
       booking.travelerDetails.forEach((traveler, index) => {
         travelerRows += `
           <tr>
-            <td style="text-align: center;">${index + 1}</td>
-            <td>${traveler.name || "N/A"}</td>
-            <td>${traveler.age || "-"}</td>
-            <td>${traveler.gender || "-"}</td>
+            <td class="text-center">${index + 1}</td>
+            <td class="text-left">${traveler.name || "N/A"}</td>
+            <td class="text-center">${traveler.age || "-"}</td>
+            <td class="text-right">${traveler.gender || "-"}</td>
           </tr>
         `;
       });
@@ -71,12 +71,30 @@ class InvoiceHelper {
     }</div>`;
 
     // Calculate totals
-    const adultPrice = booking?.selectedPackageId?.basePricePerPerson || 0;
+    const adultPrice = booking?.packageCostPerPerson|| 0;
     const childPrice = booking?.selectedPackageId?.childPrice || 0;
     const adultCount = booking.adults || 0;
-    const childCount = booking.children || 0;
+    const childCount = booking.children;
     const adultTotal = adultPrice * adultCount;
     const childTotal = childPrice * childCount;
+    const taxPercent = booking.taxPercent || 0;
+    const taxAmount =  booking.taxAmount || 0;
+    const totalAmount = adultTotal + childTotal + taxAmount;
+    const discountAmount = booking.discountAmount || 0;
+    const finalAmount = booking.finalAmount;
+    let bookingName = booking.bookingType === "Package Tour" ? booking.selectedPackageId.packageName : booking.selectedTourId.tourName;
+          // amountDue = finalAmount;
+    let durationInDays = 0;
+    let durationInNight = 0;
+    if (booking.bookingType === "Package Tour" && booking.selectedPackageId) {
+      durationInDays = booking.selectedPackageId.durationDays || 0;
+      durationInNight = booking.selectedPackageId.durationNights || 0;
+    } else if (booking.selectedTourId) {
+      durationInDays = 0;
+      durationInNight = 0;
+    }
+
+    console.log("durationInDays,durationInNight",durationInDays,durationInNight)
 
     const replacements = {
       "{{invoiceNumber}}": booking.invoiceNumber || "-",
@@ -89,10 +107,12 @@ class InvoiceHelper {
       "{{mobileNumber}}": booking.mobileNumber || "-",
       "{{email}}": booking.email || "Not provided",
       "{{userType}}": booking.userType || "App User",
-      "{{bookingType}}": booking.bookingType || "-",
+      "{{bookingName}}": bookingName,
+      "{{adultLabel}}": booking.bookingType === "Group Tour" ? "Person" : "Adult",
       "{{travelStartDate}}": formatDate(booking.travelStartDate),
       "{{travelEndDate}}": formatDate(booking.travelEndDate),
-      "{{durationInDays}}": booking.durationInDays || 0,
+      "{{durationInDays}}": durationInDays,
+      "{{durationInNight}}": durationInNight,
       "{{numberOfTravelers}}": booking.numberOfTravelers || 0,
       "{{adultPrice}}": formatCurrency(adultPrice),
       "{{childPrice}}": formatCurrency(childPrice),
@@ -105,15 +125,19 @@ class InvoiceHelper {
       ),
       "{{totalAmount}}": formatCurrency(booking.totalAmount || 0),
       "{{discountAmount}}": formatCurrency(booking.discountAmount || 0),
-      "{{finalAmount}}": formatCurrency(amountDue),
+      "{{finalAmount}}": formatCurrency(finalAmount),
+      "{{taxPercent}}": taxPercent,
+      "{{taxAmount}}": formatCurrency(taxAmount),
       "{{addOnsTotal}}": formatCurrency(booking.addOnsTotal || 0),
       "{{paymentMethod}}": booking.paymentMethod || "N/A",
       "{{transactionId}}": booking.transactionId || "N/A",
       "{{generatedDate}}": new Date().toLocaleString("en-IN"),
       "{{packageInfo}}": packageInfo,
       "{{travelerRows}}": travelerRows,
+      "{{bookingType}}": booking.bookingType || "N/A",
     };
 
+     
     for (const [key, value] of Object.entries(replacements)) {
       if (html.includes(key)) {
         html = html.split(key).join(value);
@@ -135,6 +159,30 @@ class InvoiceHelper {
     html = html.replace(
       /\{\{#if transactionId\}\}([\s\S]*?)\{\{\/if\}\}/g,
       booking.transactionId ? "$1" : ""
+    );
+
+    const hasDurationDays = durationInDays && durationInDays > 0;
+    html = html.replace(
+      /\{\{#if durationInDays\}\}([\s\S]*?)\{\{\/if\}\}/g,
+      hasDurationDays ? "$1" : ""
+    );
+
+    const hasDurationNights = durationInNight && durationInNight > 0;
+    html = html.replace(
+      /\{\{#if durationInNight\}\}([\s\S]*?)\{\{\/if\}\}/g,
+      hasDurationNights ? "$1" : ""
+    );
+
+    const hasChild = booking.children && booking.children > 0 && booking.bookingType === "Package Tour";
+    html = html.replace(
+      /\{\{#if hasChild\}\}([\s\S]*?)\{\{\/if\}\}/g,
+      hasChild ? "$1" : ""
+    );
+
+    const showTravelDates = booking.bookingType === "Group Tour";
+    html = html.replace(
+      /\{\{#if showTravelDates\}\}([\s\S]*?)\{\{\/if\}\}/g,
+      showTravelDates ? "$1" : ""
     );
 
     const hasDiscount = booking.discountAmount && booking.discountAmount > 0;

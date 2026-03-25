@@ -2,6 +2,7 @@ const puppeteer = require("puppeteer-core");
 const InvoiceHelper = require("../utils/invoiceHelper");
 const { s3Client } = require("../middleware/s3Upload");
 const { PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { pdfLogger, elapsedMs } = require("../utils/logger");
 
 class InvoiceService {
   constructor() {
@@ -9,24 +10,74 @@ class InvoiceService {
   }
 
   async generateInvoice(booking) {
+    const startTime = Date.now();
+    const bookingRef = booking.bookingId || booking.invoiceNumber || "UNKNOWN";
+
+    pdfLogger.info(`[generateInvoice] START`, {
+      bookingId: bookingRef,
+      invoiceNumber: booking.invoiceNumber,
+      startTime: new Date(startTime).toISOString(),
+    });
+
     try {
+      pdfLogger.info(`[generateInvoice] Generating PDF buffer...`, { bookingId: bookingRef });
       const pdfBuffer = await this.generatePDFBuffer(booking);
+      pdfLogger.info(`[generateInvoice] PDF buffer ready. Uploading to S3...`, { bookingId: bookingRef });
+
       const invoiceUrl = await this.uploadInvoiceToS3(
         pdfBuffer,
         booking.invoiceNumber || booking.bookingId || Date.now()
       );
+
+      const endTime = Date.now();
+      pdfLogger.info(`[generateInvoice] END - SUCCESS`, {
+        bookingId: bookingRef,
+        invoiceUrl,
+        endTime: new Date(endTime).toISOString(),
+        totalDuration: elapsedMs(startTime),
+      });
+
       return invoiceUrl;
     } catch (error) {
-      console.error("Error generating invoice:", error);
-      if (error.stack) console.error(error.stack);
+      const endTime = Date.now();
+      pdfLogger.error(`[generateInvoice] END - FAILED`, {
+        bookingId: bookingRef,
+        endTime: new Date(endTime).toISOString(),
+        totalDuration: elapsedMs(startTime),
+        error: error.message,
+        stack: error.stack,
+      });
       throw new Error("Failed to generate invoice");
     }
   }
 
   async generatePDFBuffer(booking) {
+    const startTime = Date.now();
+    const bookingRef = booking.bookingId || booking.invoiceNumber || "UNKNOWN";
     let browser;
+
+    pdfLogger.info(`[generatePDFBuffer] START - Launching Puppeteer browser`, {
+      bookingId: bookingRef,
+      startTime: new Date(startTime).toISOString(),
+      chromiumPath: process.env.CHROMIUM_PATH || "/usr/bin/chromium-browser",
+    });
+
     try {
-      const html = typeof booking === "string" ? booking : InvoiceHelper.getInvoiceHTML(booking);
+      const html =
+        typeof booking === "string"
+          ? booking
+          : InvoiceHelper.getInvoiceHTML(booking);
+
+      pdfLogger.debug(`[generatePDFBuffer] HTML template generated`, {
+        bookingId: bookingRef,
+        htmlLength: html.length,
+        elapsed: elapsedMs(startTime),
+      });
+
+      pdfLogger.info(`[generatePDFBuffer] Launching browser...`, {
+        bookingId: bookingRef,
+        elapsed: elapsedMs(startTime),
+      });
 
       browser = await puppeteer.launch({
         executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium-browser",
@@ -37,8 +88,25 @@ class InvoiceService {
           "--disable-dev-shm-usage",
         ],
       });
+
+      pdfLogger.info(`[generatePDFBuffer] Browser launched. Opening new page...`, {
+        bookingId: bookingRef,
+        elapsed: elapsedMs(startTime),
+      });
+
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+
+      pdfLogger.info(`[generatePDFBuffer] Page opened. Setting HTML content...`, {
+        bookingId: bookingRef,
+        elapsed: elapsedMs(startTime),
+      });
+
+      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 30000 });
+
+      pdfLogger.info(`[generatePDFBuffer] HTML content set. Generating PDF...`, {
+        bookingId: bookingRef,
+        elapsed: elapsedMs(startTime),
+      }); 
 
       const pdfBuffer = await page.pdf({
         format: "A4",
@@ -46,19 +114,51 @@ class InvoiceService {
         margin: { top: "0mm", right: "0mm", bottom: "0mm", left: "0mm" },
       });
 
+      pdfLogger.info(`[generatePDFBuffer] PDF generated. Closing browser...`, {
+        bookingId: bookingRef,
+        pdfSizeKB: `${(pdfBuffer.length / 1024).toFixed(2)} KB`,
+        elapsed: elapsedMs(startTime),
+      });
+
       await browser.close();
+
+      const endTime = Date.now();
+      pdfLogger.info(`[generatePDFBuffer] END - SUCCESS`, {
+        bookingId: bookingRef,
+        pdfSizeKB: `${(pdfBuffer.length / 1024).toFixed(2)} KB`,
+        endTime: new Date(endTime).toISOString(),
+        totalDuration: elapsedMs(startTime),
+      });
+
       return pdfBuffer;
     } catch (error) {
-      if (browser) await browser.close().catch(() => {});
-      console.error("Error generating PDF buffer:", error);
+      const endTime = Date.now();
+      pdfLogger.error(`[generatePDFBuffer] END - FAILED`, {
+        bookingId: bookingRef,
+        endTime: new Date(endTime).toISOString(),
+        totalDuration: elapsedMs(startTime),
+        error: error.message,
+        stack: error.stack,
+      });
+
+      if (browser) {
+        try {
+          await browser.close();
+          pdfLogger.info(`[generatePDFBuffer] Browser closed after error`, { bookingId: bookingRef });
+        } catch (closeErr) {
+          pdfLogger.warn(`[generatePDFBuffer] Could not close browser after error`, {
+            bookingId: bookingRef,
+            closeError: closeErr.message,
+          });
+        }
+      }
+
       throw error;
     }
   }
 
   generateHeader(doc, booking) {
-    // You can add a logo here if you have one locally or via url
-    // doc.image("path/to/logo.png", 50, 45, { width: 50 });
-
+    
     doc
       .fillColor("#444444")
       .fontSize(20)
@@ -67,7 +167,6 @@ class InvoiceService {
       .text("123 Travel Street", 200, 50, { align: "right" })
       .text("New Delhi, India", 200, 65, { align: "right" });
 
-    // Show GST number if available
     if (booking.gstNumber) {
       doc.text(`GSTIN: ${booking.gstNumber}`, 200, 80, { align: "right" });
     }
@@ -88,7 +187,6 @@ class InvoiceService {
       ? new Date(booking.createdAt).toLocaleDateString("en-IN")
       : new Date().toLocaleDateString("en-IN");
 
-    // Status color logic (simulated with text color/text)
     const status = booking.paymentStatus || "Pending";
 
     this.generateHr(doc, 185);
@@ -104,11 +202,11 @@ class InvoiceService {
       .text("Invoice Date:", 50, customerInformationTop + 15)
       .text(invoiceDate, 150, customerInformationTop + 15)
       .text("Payment Status:", 50, customerInformationTop + 30)
-      .fillColor(status === 'Paid' ? '#27ae60' : '#e74c3c')
+      .fillColor(status === "Paid" ? "#27ae60" : "#e74c3c")
       .font("Helvetica-Bold")
       .text(status, 150, customerInformationTop + 30)
-      .fillColor('#444444')
-      .font("Helvetica") // reset
+      .fillColor("#444444")
+      .font("Helvetica")
       .text("Customer Name:", 300, customerInformationTop)
       .font("Helvetica-Bold")
       .text(booking.customerName || "-", 400, customerInformationTop)
@@ -123,22 +221,26 @@ class InvoiceService {
   generateInvoiceTable(doc, booking) {
     let i = 300;
 
-    const packageName = booking.selectedPackageId?.title || booking.selectedTourId?.tourName || "Travel Booking";
+    const packageName =
+      booking.selectedPackageId?.title ||
+      booking.selectedTourId?.tourName ||
+      "Travel Booking";
     const adults = booking.adults || 0;
     const children = booking.children || 0;
     const addOnsTotal = booking.addOnsTotal || 0;
 
-    // Header
     doc.font("Helvetica-Bold");
     this.generateTableRow(doc, i, "Item", "Quantity", "Price", "Total");
     this.generateHr(doc, i + 20);
     doc.font("Helvetica");
 
-    // Items
-    // 1. Package/Tour Base Cost (Adults)
     if (adults > 0) {
       i += 30;
-      const adultPrice = booking.selectedPackageId?.basePricePerPerson || booking.selectedTourId?.perPersonCost || booking.packageCostPerPerson || 0;
+      const adultPrice =
+        booking.selectedPackageId?.basePricePerPerson ||
+        booking.selectedTourId?.perPersonCost ||
+        booking.packageCostPerPerson ||
+        0;
       const adultTotal = adultPrice * adults;
       this.generateTableRow(
         doc,
@@ -150,10 +252,13 @@ class InvoiceService {
       );
     }
 
-    // 2. Children
     if (children > 0) {
       i += 30;
-      const childPrice = booking.selectedPackageId?.childPrice || booking.selectedTourId?.perPersonCost || booking.childCostPerPerson || 0;
+      const childPrice =
+        booking.selectedPackageId?.childPrice ||
+        booking.selectedTourId?.perPersonCost ||
+        booking.childCostPerPerson ||
+        0;
       const childTotal = childPrice * children;
       this.generateTableRow(
         doc,
@@ -165,21 +270,10 @@ class InvoiceService {
       );
     }
 
-    // 3. Add-ons
     if (addOnsTotal > 0) {
       i += 30;
-      this.generateTableRow(
-        doc,
-        i,
-        "Add-ons",
-        "-",
-        "-",
-        this.formatCurrency(addOnsTotal)
-      );
+      this.generateTableRow(doc, i, "Add-ons", "-", "-", this.formatCurrency(addOnsTotal));
     }
-
-    // 4. Discount (if showing breakdown, though booking.totalAmount usually implies final)
-    // Using finalAmount from booking if available or simple calculation
 
     this.generateHr(doc, i + 30);
 
@@ -191,7 +285,6 @@ class InvoiceService {
 
     doc.font("Helvetica-Bold");
 
-    // Subtotal (pre-tax)
     this.generateTableRow(
       doc,
       subtotalPosition,
@@ -201,7 +294,6 @@ class InvoiceService {
       this.formatCurrency(subtotal)
     );
 
-    // GST line
     if (taxAmount > 0) {
       this.generateTableRow(
         doc,
@@ -213,7 +305,6 @@ class InvoiceService {
       );
     }
 
-    // Total including GST
     const totalRow = taxAmount > 0 ? subtotalPosition + 40 : subtotalPosition + 20;
     this.generateHr(doc, totalRow - 5);
     this.generateTableRow(
@@ -226,7 +317,6 @@ class InvoiceService {
     );
     doc.font("Helvetica");
 
-    // Traveler List
     if (booking.travelerDetails && booking.travelerDetails.length > 0) {
       let y = totalRow + 30;
       this.generateHr(doc, y);
@@ -236,7 +326,11 @@ class InvoiceService {
       doc.fontSize(10);
 
       booking.travelerDetails.forEach((t, idx) => {
-        doc.text(`${idx + 1}. ${t.name || "N/A"} (${t.gender || "-"}, ${t.age || "-"} yrs)`, 50, y);
+        doc.text(
+          `${idx + 1}. ${t.name || "N/A"} (${t.gender || "-"}, ${t.age || "-"} yrs)`,
+          50,
+          y
+        );
         y += 15;
       });
     }
@@ -276,6 +370,13 @@ class InvoiceService {
   }
 
   async uploadInvoiceToS3(pdfBuffer, invoiceNumber) {
+    const startTime = Date.now();
+    pdfLogger.info(`[uploadInvoiceToS3] START - Uploading to S3`, {
+      invoiceNumber,
+      startTime: new Date(startTime).toISOString(),
+      pdfSizeKB: `${(pdfBuffer.length / 1024).toFixed(2)} KB`,
+    });
+
     try {
       const fileName = `invoice_${invoiceNumber}_${Date.now()}.pdf`;
       const key = `TourTravels/INVOICES/${fileName}`;
@@ -293,10 +394,26 @@ class InvoiceService {
       const endpoint =
         process.env.LINODE_OBJECT_STORAGE_ENDPOINT ||
         "https://in-maa-1.linodeobjects.com";
-      return `${endpoint}/${this.bucketName}/${key}`;
+      const invoiceUrl = `${endpoint}/${this.bucketName}/${key}`;
+
+      const endTime = Date.now();
+      pdfLogger.info(`[uploadInvoiceToS3] END - SUCCESS`, {
+        invoiceNumber,
+        invoiceUrl,
+        endTime: new Date(endTime).toISOString(),
+        totalDuration: elapsedMs(startTime),
+      });
+
+      return invoiceUrl;
     } catch (error) {
-      console.error("Error uploading invoice to S3:", error);
-      if (error.stack) console.error(error.stack);
+      const endTime = Date.now();
+      pdfLogger.error(`[uploadInvoiceToS3] END - FAILED`, {
+        invoiceNumber,
+        endTime: new Date(endTime).toISOString(),
+        totalDuration: elapsedMs(startTime),
+        error: error.message,
+        stack: error.stack,
+      });
       throw new Error("Failed to upload invoice");
     }
   }
@@ -317,7 +434,11 @@ class InvoiceService {
 
       return true;
     } catch (error) {
-      console.error("Error deleting invoice from S3:", error);
+      pdfLogger.error(`[deleteInvoice] FAILED`, {
+        invoiceUrl,
+        error: error.message,
+        stack: error.stack,
+      });
       throw new Error("Failed to delete invoice");
     }
   }

@@ -42,9 +42,25 @@ const razorpayTestRoutes = require('./razorpay-test/routes');
 
 const app = express();
 
-app.use(express.json());
-app.use(cors());
+const allowedOrigins =["http://localhost:3000","http://192.168.29.16:5500","http://localhost:14000","http://localhost:5173","https://zunjarraoyatra.com","https://admin.zunjarraoyatra.com","https://api.zunjarraoyatra.com", "null"];
 
+
+app.use(express.json());
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // allow Postman
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  }),
+);
 app.use("/api/cities", cityRoutes);
 app.use("/api/states", stateRoutes);
 app.use("/api/countries", countryRoutes);

@@ -2,12 +2,12 @@ const nodemailer = require("nodemailer");
 
 class EmailService {
   constructor() {
-    // if (!process.env.EMAIL_USER && !process.env.SMARTCLINIC_EMAIL_USER) {
-    //   console.error("WARNING: EMAIL_USER not configured");
-    // }
-    // if (!process.env.EMAIL_PASS && !process.env.SMARTCLINIC_EMAIL_PASS) {
-    //   console.error("WARNING: EMAIL_PASS not configured");
-    // }
+    if (!process.env.EMAIL_USER && !process.env.SMARTCLINIC_EMAIL_USER) {
+      console.error("WARNING: EMAIL_USER not configured");
+    }
+    if (!process.env.EMAIL_PASS && !process.env.SMARTCLINIC_EMAIL_PASS) {
+      console.error("WARNING: EMAIL_PASS not configured");
+    }
 
     this.transporter = nodemailer.createTransport({
       service: "gmail",
@@ -167,7 +167,7 @@ body {
       const replacements = {
         "{{customerName}}": bookingDetails.customerName || "Valued Customer",
         "{{bookingId}}": bookingDetails.bookingId || "N/A",
-        "{{amount}}": (bookingDetails.totalAmount || 0).toLocaleString("en-IN"),
+        "{{amount}}": (bookingDetails.finalAmount || 0).toLocaleString("en-IN"),
         "{{invoiceUrl}}": invoiceUrl || "#",
         "{{transactionId}}": bookingDetails.transactionId || "N/A",
         "{{date}}": new Date().toLocaleDateString("en-IN"),
@@ -198,20 +198,34 @@ body {
     const pkg = bookingDetails.selectedPackageId;
 
     if (pkg && pkg.itinerary && pkg.itinerary.length > 0) {
-      itineraryHtml = pkg.itinerary.map(day => `
+      itineraryHtml = pkg.itinerary.map(day => {
+        const placesName = day.placeIds && day.placeIds.length > 0
+          ? day.placeIds.map(p => p.placeName || "").filter(Boolean).join(", ")
+          : "N/A";
+        const meals = day.mealsIncluded && day.mealsIncluded.length > 0 ? day.mealsIncluded.join(", ") : "None";
+        const hotel = day.hotelDetails || "N/A";
+        const transport = day.transportInfo || "N/A";
+
+        return `
         <div style="margin-bottom: 20px; border-left: 4px solid #27ae60; padding-left: 15px; background-color: #f9f9f9; padding: 15px; border-radius: 4px;">
           <h3 style="margin-top: 0; color: #2c3e50; font-size: 18px;">Day ${day.dayNumber}: ${day.dayTitle || 'Activities'}</h3>
-          <p style="color: #555; margin-bottom: 0;">${day.description || 'Details will be provided by your guide.'}</p>
+          <div style="color: #444; font-size: 14px; margin-bottom: 8px;">
+            <strong>Places to Visit:</strong> ${placesName}<br/>
+            <strong>Meals Included:</strong> ${meals}<br/>
+            <strong>Hotel Details:</strong> ${hotel}<br/>
+            <strong>Transport:</strong> ${transport}
+          </div>
+          <p style="color: #555; margin-top: 8px; margin-bottom: 0;">${day.description || 'Details will be provided by your guide.'}</p>
         </div>
-      `).join('');
+      `}).join('');
     } else {
       itineraryHtml = '<p>Your trip is booked! Standard itinerary applies, specific daily details will be shared closer to the travel date.</p>';
     }
 
     const packageName = pkg ? pkg.packageName : (bookingDetails.selectedTourId ? bookingDetails.selectedTourId.tourName : 'Your Trip');
     const customerName = bookingDetails.customerName || "Valued Customer";
-    const startDate = bookingDetails.travelStartDate ? new Date(bookingDetails.travelStartDate).toLocaleDateString("en-IN") : "TBD";
-    const endDate = bookingDetails.travelEndDate ? new Date(bookingDetails.travelEndDate).toLocaleDateString("en-IN") : "TBD";
+    const durationDays = pkg ? (pkg.durationDays || 0) : 0;
+    const durationNights = pkg ? (pkg.durationNights || 0) : 0;
 
     return `
 <!DOCTYPE html>
@@ -279,7 +293,7 @@ body {
     
     <div class="trip-summary">
       <p><strong>Package/Tour:</strong> ${packageName}</p>
-      <p><strong>Travel Dates:</strong> ${startDate} to ${endDate}</p>
+      <p><strong>Duration:</strong> ${durationDays} Days / ${durationNights} Nights</p>
       <p><strong>Booking ID:</strong> ${bookingDetails.bookingId || "N/A"}</p>
     </div>
 
