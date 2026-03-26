@@ -106,7 +106,7 @@ class InvoiceService {
       pdfLogger.info(`[generatePDFBuffer] HTML content set. Generating PDF...`, {
         bookingId: bookingRef,
         elapsed: elapsedMs(startTime),
-      }); 
+      });
 
       const pdfBuffer = await page.pdf({
         format: "A4",
@@ -158,7 +158,7 @@ class InvoiceService {
   }
 
   generateHeader(doc, booking) {
-    
+
     doc
       .fillColor("#444444")
       .fontSize(20)

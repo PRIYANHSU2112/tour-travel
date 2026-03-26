@@ -14,6 +14,14 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.get("/export-leads/excel", async (req, res) => {
+  try {
+    await leadController.exportLeadsExcel(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get("/", async (req, res) => {
   try {
     const { page, limit, sort, ...filters } = req.query;

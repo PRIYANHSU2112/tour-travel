@@ -17,6 +17,15 @@ router.post("/",protect, async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 });
+
+router.get("/export/excel", protect, async (req, res) => {
+  try {
+    await contactUsController.exportContactUsExcel(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get("/:id", protect,async (req, res) => {
   try {
     const {id}= req.params;

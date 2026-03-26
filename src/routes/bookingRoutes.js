@@ -97,23 +97,6 @@ router.get("/user", protect, async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
-  try {
-    const booking = await bookingController.getBookingById(req.params.id);
-    if (!booking) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Booking not found" });
-    }
-    res.status(200).json({
-      success: true,
-      message: "Booking fetched successfully",
-      data: booking,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 router.put("/:id", protect, async (req, res) => {
   try {
@@ -216,7 +199,7 @@ router.get("/admin/table", protect, async (req, res) => {
 //   }
 // });
 
-router.post("/export-bookings", protect, async (req, res) => {
+router.get("/export-bookings", protect, async (req, res) => {
   try {
     await bookingController.exportBookingsExcel(req, res);
   } catch (err) {
@@ -224,6 +207,24 @@ router.post("/export-bookings", protect, async (req, res) => {
       success: false,
       message: err.message,
     });
+  }
+});
+
+router.get("/:id", async (req, res) => {
+  try {
+    const booking = await bookingController.getBookingById(req.params.id);
+    if (!booking) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Booking not found" });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Booking fetched successfully",
+      data: booking,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

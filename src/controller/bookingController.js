@@ -337,7 +337,6 @@ class BookingController {
       const { tourId, packageId } = req.query;
 
       const filter = {
-        isDisabled: false,
       };
 
       if (tourId && mongoose.Types.ObjectId.isValid(tourId)) {

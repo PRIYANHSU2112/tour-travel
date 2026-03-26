@@ -140,6 +140,149 @@ class GuideAllocationController {
     return this.model.findByIdAndDelete(id);
   }
 
+  async exportGuideAllocationsExcel(req, res) {
+    let tempFilePath = null;
+    const fs = require("fs");
+    const path = require("path");
+
+    try {
+      const allocations = await this.model
+        .find()
+        .populate("guideId", "fullName email phone")
+        .populate("tourId", "tourName")
+        .populate("bookingId", "bookingId customerName")
+        .populate("assignedBy", "firstName lastName email")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (!allocations.length) {
+        return res.status(404).json({
+          success: false,
+          message: "No guide allocations found",
+        });
+      }
+
+      const ExcelJS = require("exceljs");
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("GuideAllocations");
+
+      const allKeys = new Set();
+      allocations.forEach((a) => Object.keys(a).forEach((k) => allKeys.add(k)));
+      
+      allKeys.add("GuideName");
+      allKeys.add("TourName");
+      allKeys.add("BookingID");
+      allKeys.add("AssignedBy");
+      
+      const keysArray = Array.from(allKeys);
+
+      worksheet.columns = keysArray.map((key) => ({
+        header: key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, " $1").trim(),
+        key: key,
+      }));
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4472C4" },
+      };
+
+      allocations.forEach((a) => {
+        const rowData = {};
+        keysArray.forEach((key) => {
+          let val = a[key];
+          
+          if (key === "GuideName") {
+            val = a.guideId ? a.guideId.fullName : "-";
+          } else if (key === "TourName") {
+            val = a.tourId ? a.tourId.tourName : "-";
+          } else if (key === "BookingID") {
+            val = a.bookingId ? a.bookingId.bookingId : "-";
+          } else if (key === "AssignedBy") {
+            val = a.assignedBy ? `${a.assignedBy.firstName || ""} ${a.assignedBy.lastName || ""}`.trim() : "-";
+          } else if ((key === "guideId" || key === "tourId" || key === "bookingId" || key === "assignedBy") && typeof val === "object") {
+            val = val._id ? val._id.toString() : "-";
+          }
+          
+          if (val === null || val === undefined) {
+            rowData[key] = "-";
+          } else if (val instanceof Date) {
+            rowData[key] = val.toLocaleString("en-IN");
+          } else if (typeof val === "object") {
+            rowData[key] = JSON.stringify(val);
+          } else {
+            rowData[key] = val.toString();
+          }
+        });
+        worksheet.addRow(rowData);
+      });
+
+      worksheet.columns.forEach((column) => {
+        column.width = 25;
+      });
+
+      const timestamp = new Date().toISOString().split("T")[0];
+      const uniqueId = Date.now();
+      const filename = `GuideAllocations_${timestamp}_${uniqueId}.xlsx`;
+
+      const tempDir = path.join(__dirname, "../../temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      tempFilePath = path.join(tempDir, filename);
+      await workbook.xlsx.writeFile(tempFilePath);
+
+      const fileBuffer = fs.readFileSync(tempFilePath);
+
+      const { s3Client } = require("../middleware/s3Upload");
+      const { PutObjectCommand } = require("@aws-sdk/client-s3");
+
+      const folderPath = process.env.BUCKET_FOLDER_PATH || "TourTravels/";
+      const s3Key = `${folderPath}EXCEL/${filename}`;
+
+      const uploadParams = {
+          Bucket: process.env.LINODE_OBJECT_BUCKET,
+          Key: s3Key,
+          Body: fileBuffer,
+          ACL: "public-read",
+          ContentType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          ContentDisposition: `attachment; filename="${filename}"`,
+      };
+
+      await s3Client.send(new PutObjectCommand(uploadParams));
+
+      const endpoint = process.env.LINODE_OBJECT_STORAGE_ENDPOINT;
+      const bucket = process.env.LINODE_OBJECT_BUCKET;
+      const fileUrl = `${endpoint}/${bucket}/${s3Key}`;
+
+      fs.unlinkSync(tempFilePath);
+      tempFilePath = null;
+
+      return res.status(200).json({
+          success: true,
+          message: "Guide allocations exported to Excel successfully",
+          data: {
+              fileUrl,
+              filename,
+              recordCount: allocations.length,
+              key: s3Key,
+          },
+      });
+    } catch (error) {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+          try { fs.unlinkSync(tempFilePath); } catch (e) {}
+      }
+      return res.status(500).json({
+          success: false,
+          message: error.message || "Failed to export guide allocations",
+      });
+    }
+  }
+
   async transferGuide(id, transferPayload) {
     let allocation = await this.model.findById(id);
     if (!allocation) {

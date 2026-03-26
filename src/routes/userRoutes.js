@@ -212,6 +212,17 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
+router.get("/export-users", protect, async (req, res) => {
+  try {
+    await userController.exportUsersExcel(req, res);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const user = await userController.getUserById(req.params.id);

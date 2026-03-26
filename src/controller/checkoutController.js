@@ -30,61 +30,44 @@ const invoiceService = new InvoiceService();
 const whatsappService = new WhatsAppService();
 
 const createBookingsFromCart = async (req, res) => {
-  // console.log(process.env.RAZORPAY_KEY_SECRET);
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // const { userId } = req.params;
     const {
-      travelerDetailsMap,
+      travelerDetailsMap = [],
       customerInfo,
       userId,
       packageId,
       tourId,
       selectedAddOns = [],
-      adults,
-      children,
+      adults = 0,
+      children = 0,
       checkInDate,
       selectedSeats = [],
     } = req.body;
 
+    // Cancel previous pending orders
     const previousPendingOrders = await orderModel
       .find({ userId, orderStatus: "Pending" })
       .session(session);
 
-    for (const order of previousPendingOrders) {
-      await order.cancelWithBookings(session);
-    }
+    await Promise.all(
+      previousPendingOrders.map(order =>
+        order.cancelWithBookings(session)
+      )
+    );
 
-    // const cart = await cartModel.findOne({ userId }).populate('items.packageId').session(session);
-    // if (!cart || cart.items.length === 0) {
-    //     await session.abortTransaction();
-    //     session.endSession();
-    //     return res.status(400).json({
-    //         success: false,
-    //         message: "Cart is empty"
-    //     });
-    // }
+    // Fetch package/tour in parallel
+    const [packageData, tourData] = await Promise.all([
+      packageId
+        ? packageModel.findById(new mongoose.Types.ObjectId(packageId))
+        : null,
+      tourId
+        ? tourModel.findById(new mongoose.Types.ObjectId(tourId))
+        : null,
+    ]);
 
-    const bookings = [];
-
-    // Fetch package or tour data based on what's provided
-    let packageData = null;
-    let tourData = null;
-
-    if (packageId) {
-      packageData = await packageModel.findById(
-        new mongoose.Types.ObjectId(packageId),
-      );
-    }
-    // console.log("packageData"+packageData);
-
-    if (tourId) {
-      tourData = await tourModel.findById(new mongoose.Types.ObjectId(tourId));
-    }
-
-    // // Validate that we have at least one source of pricing data
     if (!packageData && !tourData) {
       await session.abortTransaction();
       session.endSession();
@@ -94,134 +77,152 @@ const createBookingsFromCart = async (req, res) => {
       });
     }
 
+    // Fetch company + agent in parallel
+    const [company, agent] = await Promise.all([
+      Company.findOne(),
+      agentModel
+        .findOne({ userId: new mongoose.Types.ObjectId(userId) })
+        .session(session),
+    ]);
 
-
-    // Fetch company settings for GST
-    const company = await Company.findOne();
-    const companyGstNumber = company?.gstNumber || '';
+    const companyGstNumber = company?.gstNumber || "";
     const companyTaxPercent = company?.tax || 0;
-
-    // Check if the user is an agent
-    const agent = await agentModel.findOne({ userId: new mongoose.Types.ObjectId(userId) }).session(session);
     const assignedAgent = agent ? userId : undefined;
 
-    // for (const cartItem of cart.items) {
-    {
-      const travelers = Array.isArray(travelerDetailsMap)
-        ? travelerDetailsMap
-        : [];
-      const totalTravelers = adults + children;
+    const travelers = Array.isArray(travelerDetailsMap)
+      ? travelerDetailsMap
+      : [];
 
-      // Determine pricing: use package data if available, otherwise use tour data
-      let basePrice, childPrice, packageCostPerPerson, duration, cityId;
+    const totalTravelers = adults + children;
 
-      if (packageData) {
-        // Package booking - use package pricing
-        basePrice = packageData.basePricePerPerson || 0;
-        childPrice = packageData.childPrice || basePrice;
-        packageCostPerPerson = basePrice;
-        duration = packageData.duration || 1;
-        cityId = packageData.cityId;
-      } else {
-        // Tour-only booking - use tour's perPersonCost
-        basePrice = tourData.perPersonCost || 0;
-        childPrice = tourData.perPersonCost || 0; // Tour uses same price for adults and children
-        packageCostPerPerson = basePrice;
-        duration = tourData.durationInDays || 1;
-        cityId = tourData.cityId;
-      }
+    // Pricing Logic
+    let basePrice, childPrice, packageCostPerPerson, duration, cityId;
 
-      const addOnsTotal = selectedAddOns.reduce(
-        (sum, addOn) => sum + addOn.price,
-        0,
-      );
-      // console.log(addOnsTotal);
-      const quantity = 1;
-
-      // Group Discount Calculation
-      let calculatedDiscountAmount = 0;
-
-      if (packageData && packageData.groupDiscounts && packageData.groupDiscounts.length > 0) {
-        // Find highest applicable discount based on minPersons (Adults only)
-        const applicableDiscounts = packageData.groupDiscounts
-          .filter(d => adults >= d.minPersons)
-          .sort((a, b) => b.minPersons - a.minPersons);
-
-        if (applicableDiscounts.length > 0) {
-          const discountPercent = applicableDiscounts[0].discountPercent;
-          // Apply discount on the base tour price (excluding addons)
-          const baseTourCost = (basePrice * adults + childPrice * children) * quantity;
-          calculatedDiscountAmount = (baseTourCost * discountPercent) / 100;
-        }
-      }
-
-      const totalAmount =
-        (basePrice * adults + childPrice * children + addOnsTotal) * quantity - calculatedDiscountAmount;
-
-      // console.log("Discount Amount:", calculatedDiscountAmount, "Total:", totalAmount);
-      const travelEndDate = new Date(checkInDate);
-      travelEndDate.setDate(travelEndDate.getDate() + duration);
-
-      const newBooking = new bookingModel({
-        userId,
-        customerName: customerInfo.name,
-        mobileNumber: customerInfo.phone,
-        email: customerInfo.email,
-        userType: "App User",
-        bookingType: tourId ? "Group Tour" : "Package Tour",
-        selectedPackageId: packageData ? packageData._id : undefined,
-        selectedTourId: tourId
-          ? new mongoose.Types.ObjectId(tourId)
-          : undefined,
-        cityId: cityId,
-        numberOfTravelers: totalTravelers,
-        adults: adults,
-        children: children,
-        travelStartDate: checkInDate,
-        travelEndDate,
-        packageCostPerPerson,
-        childCostPerPerson: childPrice,
-        selectedAddOns: selectedAddOns,
-        addOnsTotal,
-        travelerDetails: travelers,
-        selectedSeats: selectedSeats,
-        specialRequests: customerInfo.specialRequests || "",
-        paymentStatus: "Pending",
-        bookingStatus: "Pending",
-        totalAmount: totalAmount, // Note: Model pre-save will recompute totalAmount, finalAmount and taxAmount
-        discountAmount: calculatedDiscountAmount,
-        createdBy: userId,
-        assignedAgent: assignedAgent,
-        gstNumber: companyGstNumber,
-        taxPercent: companyTaxPercent,
-      });
-
-      await newBooking.save({ session });
-      bookings.push(newBooking);
-      // }
+    if (packageData) {
+      basePrice = packageData.basePricePerPerson || 0;
+      childPrice = packageData.childPrice || basePrice;
+      packageCostPerPerson = basePrice;
+      duration =
+        Math.max(
+          packageData.durationDays || 0,
+          packageData.durationNights || 0
+        ) || 1;
+      cityId = packageData.cityId;
+    } else {
+      basePrice = tourData.perPersonCost || 0;
+      childPrice = basePrice;
+      packageCostPerPerson = basePrice;
+      duration = tourData.durationInDays || 1;
+      cityId = tourData.cityId;
     }
-    // console.log(bookings);
-    const totalAmount = bookings.reduce((sum, b) => sum + b.finalAmount, 0);
-    console.log("last amount", totalAmount);
+
+    // Addons Total
+    const addOnsTotal = selectedAddOns.reduce(
+      (sum, addOn) => sum + addOn.price,
+      0
+    );
+
+    const quantity = 1;
+
+    // Group Discount
+    let calculatedDiscountAmount = 0;
+
+    if (packageData?.groupDiscounts?.length) {
+      const applicableDiscount = packageData.groupDiscounts
+        .filter(d => adults >= d.minPersons)
+        .sort((a, b) => b.minPersons - a.minPersons)[0];
+
+      if (applicableDiscount) {
+        const baseTourCost = basePrice * adults * quantity;
+        calculatedDiscountAmount =
+          (baseTourCost * applicableDiscount.discountPercent) / 100;
+      }
+    }
+
+    // Total Amount
+    const totalAmount =
+      basePrice * adults * quantity -
+      calculatedDiscountAmount +
+      childPrice * children +
+      addOnsTotal;
+
+    // Travel Dates
+    let finalTravelStartDate = checkInDate;
+    let finalTravelEndDate = new Date(checkInDate);
+    finalTravelEndDate.setDate(
+      finalTravelEndDate.getDate() + duration
+    );
+
+    if (tourId && tourData) {
+      finalTravelStartDate = tourData.startDate;
+      finalTravelEndDate = tourData.endDate;
+    }
+
+    // Create Booking
+    const newBooking = new bookingModel({
+      userId,
+      customerName: customerInfo.name,
+      mobileNumber: customerInfo.phone,
+      email: customerInfo.email,
+      userType: "App User",
+      bookingType: tourId ? "Group Tour" : "Package Tour",
+      selectedPackageId: packageData?._id,
+      selectedTourId: tourId
+        ? new mongoose.Types.ObjectId(tourId)
+        : undefined,
+      cityId,
+      numberOfTravelers: totalTravelers,
+      adults,
+      children,
+      travelStartDate: finalTravelStartDate,
+      travelEndDate: finalTravelEndDate,
+      packageCostPerPerson,
+      childCostPerPerson: childPrice,
+      selectedAddOns,
+      addOnsTotal,
+      travelerDetails: travelers,
+      selectedSeats,
+      specialRequests: customerInfo.specialRequests || "",
+      paymentStatus: "Pending",
+      bookingStatus: "Pending",
+      totalAmount,
+      discountAmount: calculatedDiscountAmount,
+      createdBy: userId,
+      assignedAgent,
+      gstNumber: companyGstNumber,
+      taxPercent: companyTaxPercent,
+    });
+
+    await newBooking.save({ session });
+
+    const bookings = [newBooking];
+
+    // Final Amount
+    const finalTotalAmount = bookings.reduce(
+      (sum, b) => sum + b.finalAmount,
+      0
+    );
+
     const razorpayOrderOptions = {
-      amount: Math.round(totalAmount * 100),
+      amount: Math.round(finalTotalAmount * 100),
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
-
       notes: {
-        userId: userId,
+        userId,
         customerName: customerInfo.name,
         customerEmail: customerInfo.email,
         bookingType: "Package Tour",
       },
     };
 
-    const razorpayOrder = await razorpay.orders.create(razorpayOrderOptions);
+    const razorpayOrder = await razorpay.orders.create(
+      razorpayOrderOptions
+    );
 
     const newOrder = new orderModel({
       userId,
-      bookingIds: bookings.map((b) => b.bookingId),
-      totalAmount,
+      bookingIds: bookings.map(b => b.bookingId),
+      totalAmount: finalTotalAmount,
       orderId: razorpayOrder.id,
     });
 
@@ -230,13 +231,13 @@ const createBookingsFromCart = async (req, res) => {
     await bookingModel.updateMany(
       { bookingId: { $in: newOrder.bookingIds } },
       { orderId: newOrder.orderId },
-      { session },
+      { session }
     );
 
     await session.commitTransaction();
     session.endSession();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Bookings created. Please proceed to payment.",
       orderId: newOrder.orderId,
@@ -249,11 +250,13 @@ const createBookingsFromCart = async (req, res) => {
       },
       razorpayKeyId: process.env.RAZORPAY_KEY_ID,
     });
+
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
     console.error("Error creating bookings:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Failed to create bookings",
     });

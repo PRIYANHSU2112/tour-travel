@@ -9,6 +9,7 @@ router.get("/my-withdrawals", protect, walletController.getAgentWithdrawals);
 router.post("/withdraw", protect, walletController.requestWithdrawal);
 
 // Admin Routes
+router.get("/admin/export-transactions/excel", protect, walletController.exportTransactionsExcel);
 router.get("/withdrawals", protect, walletController.getWithdrawals);
 router.put("/withdrawals/approve/:id", protect, walletController.approveWithdrawal);
 router.put("/withdrawals/reject/:id", protect, walletController.rejectWithdrawal);
@@ -28,6 +29,7 @@ router.put("/distributor/transfers/reject/:id", protect, walletController.reject
 // Distributor to Admin Transfer Routes
 router.post("/admin/transfer", protect, walletController.requestTransferFromAdmin);
 router.get("/admin/transfers/distributor", protect, walletController.getDistributorAdminTransferRequests);
+router.get("/admin/transfers/export/excel", protect, walletController.exportDistributorTransfersExcel);
 router.get("/admin/transfers/requests", protect, walletController.getAdminTransferRequests);
 router.put("/admin/transfers/approve/:id", protect, walletController.approveAdminTransferRequest);
 router.put("/admin/transfers/reject/:id", protect, walletController.rejectAdminTransferRequest);
