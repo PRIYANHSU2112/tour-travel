@@ -77,7 +77,7 @@ class CityController {
       sort = { cityName: 1 };
     }
     console.log(sort)
-     console.log(normalizedFilter)
+    console.log(normalizedFilter)
     const query = this.cityModel.aggregate([
       { $match: normalizedFilter },
 
@@ -119,11 +119,11 @@ class CityController {
           places: 0
         }
       },
-       {
-          $sort: sort
-        },
-        { $skip: (currentPage - 1) * pageSize },
-        { $limit: pageSize }
+      {
+        $sort: sort
+      },
+      { $skip: (currentPage - 1) * pageSize },
+      { $limit: pageSize }
     ]);
 
 
@@ -211,8 +211,8 @@ class CityController {
       .populate("stateId")
       .populate("countryId");
   }
-  async deleteCity(id){
-       return   this.cityModel.deleteOne({ _id: id })
+  async deleteCity(id) {
+    return this.cityModel.deleteOne({ _id: id })
 
   }
 }

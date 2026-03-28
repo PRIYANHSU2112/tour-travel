@@ -3,8 +3,30 @@ const mongoose = require("mongoose");
 const bookingTypes = ["Package Tour", "Group Tour", "Custom Tour"];
 const userTypes = ["App User", "CRM Agent", "Walk-in"];
 const paymentStatuses = ["Pending", "Partial", "Paid", "Failed", "Refunded"];
-const paymentMethods = ["Online", "Cash", "Bank Transfer", "UPI", "Card", "Wallet"];
+const paymentMethods = [
+  "Online",
+  "Cash",
+  "Bank Transfer",
+  "upi",
+  "UPI",
+  "Card",
+  "Wallet",
+];
 const bookingStatuses = ["Pending", "Confirmed", "Cancelled", "Completed"];
+
+const documentSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      trim: true,
+    },
+    url: {
+      type: String,
+      trim: true,
+    },
+  },
+  { _id: false },
+);
 
 const travelerSchema = new mongoose.Schema(
   {
@@ -33,26 +55,20 @@ const travelerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    relationship:{
-      type:String,
-      trim:true
-    }
-  },
-  { _id: false }
-);
-
-const documentSchema = new mongoose.Schema(
-  {
-    name: {
+    relationship: {
       type: String,
       trim: true,
     },
-    url: {
+    seatNumber: {
       type: String,
       trim: true,
     },
+    documents: {
+      type: [documentSchema],
+      default: [],
+    },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const bookingSchema = new mongoose.Schema(
@@ -79,33 +95,34 @@ const bookingSchema = new mongoose.Schema(
     },
     nationality: {
       type: String,
-      trim: true
-
-    }
-    ,
+      trim: true,
+    },
     orderId: {
       type: String,
       index: true,
-      sparse: true
+      sparse: true,
     },
     selectedAddOns: [
       {
         addOnName: {
           type: String,
-          trim: true
+          trim: true,
         },
         price: {
           type: Number,
-          min: 0
-        }
-      }
+          min: 0,
+        },
+      },
     ],
     addOnsTotal: {
       type: Number,
       min: 0,
-      default: 0
+      default: 0,
     },
-
+    selectedSeats: {
+      type: [String],
+      default: [],
+    },
     userType: {
       type: String,
       enum: userTypes,
@@ -120,7 +137,7 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Package",
     },
-     selectedTourId: {
+    selectedTourId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Tour",
     },
@@ -136,13 +153,13 @@ const bookingSchema = new mongoose.Schema(
     adults: {
       type: Number,
       min: 1,
-      default: 1
+      default: 1,
     },
     //new h
     children: {
       type: Number,
       min: 0,
-      default: 0
+      default: 0,
     },
 
     travelerDetails: {
@@ -167,6 +184,11 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       min: 0,
     },
+    childCostPerPerson: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     totalAmount: {
       type: Number,
       min: 0,
@@ -179,6 +201,20 @@ const bookingSchema = new mongoose.Schema(
     finalAmount: {
       type: Number,
       min: 0,
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+    },
+    taxPercent: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    taxAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
     },
     //new h
     userId: {
@@ -237,11 +273,13 @@ const bookingSchema = new mongoose.Schema(
       ref: "User",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 function generateUniqueCode(prefix = "BK") {
-  const unique = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`.toUpperCase();
+  const unique = `${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .substring(2, 8)}`.toUpperCase();
   return `${prefix}-${unique}`;
 }
 
@@ -260,23 +298,41 @@ function computeDuration(startDate, endDate) {
   }
   const start = new Date(startDate);
   const end = new Date(endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    end < start
+  ) {
     return undefined;
   }
   return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 }
 
 function computeAmounts(doc) {
-  const travelers = doc.numberOfTravelers || 0;
+  const adults = doc.adults || 0;
+  const children = doc.children || 0;
   const costPerPerson = doc.packageCostPerPerson || 0;
+  const childCost =
+    doc.childCostPerPerson !== undefined
+      ? doc.childCostPerPerson
+      : costPerPerson;
   //new h
   const addOnsTotal = doc.addOnsTotal || 0;
-  const total = travelers && costPerPerson ? (travelers * costPerPerson) + addOnsTotal : doc.totalAmount;
+
+  const total = adults * costPerPerson + children * childCost + addOnsTotal;
+
   const discount = doc.discountAmount || 0;
-  //new h
-  const final = total ? Math.max(total - discount, 0) : doc.finalAmount;
+  const subtotal = total ? Math.max(total - discount, 0) : doc.finalAmount;
+
   doc.totalAmount = total || 0;
-  doc.finalAmount = final !== undefined ? final : doc.totalAmount;
+
+  // Calculate GST on the subtotal (pre-tax amount)
+  const taxPercent = doc.taxPercent || 0;
+  const taxAmount = subtotal ? Math.round((subtotal * taxPercent) / 100 * 100) / 100 : 0;
+  doc.taxAmount = taxAmount;
+
+  // finalAmount includes GST
+  doc.finalAmount = subtotal !== undefined ? subtotal + taxAmount : doc.totalAmount;
 }
 
 bookingSchema.pre("save", async function (next) {
@@ -290,7 +346,11 @@ bookingSchema.pre("save", async function (next) {
     if (!this.invoiceNumber) {
       const Booking = this.constructor;
       const rawInvoice = generateUniqueCode("INV");
-      this.invoiceNumber = await ensureUniqueField(Booking, "invoiceNumber", rawInvoice);
+      this.invoiceNumber = await ensureUniqueField(
+        Booking,
+        "invoiceNumber",
+        rawInvoice,
+      );
     }
 
     const duration = computeDuration(this.travelStartDate, this.travelEndDate);
@@ -334,30 +394,50 @@ bookingSchema.pre("findOneAndUpdate", async function (next) {
       payload.numberOfTravelers !== undefined ||
       payload.totalAmount !== undefined ||
       payload.discountAmount !== undefined ||
-      payload.addOnsTotal !== undefined
+      payload.addOnsTotal !== undefined ||
+      payload.taxPercent !== undefined
     ) {
       const existing = await this.model.findOne(this.getQuery());
       const tempDoc = {
         numberOfTravelers:
-          payload.numberOfTravelers !== undefined ? payload.numberOfTravelers : existing.numberOfTravelers,
+          payload.numberOfTravelers !== undefined
+            ? payload.numberOfTravelers
+            : existing.numberOfTravelers,
         packageCostPerPerson:
           payload.packageCostPerPerson !== undefined
             ? payload.packageCostPerPerson
             : existing.packageCostPerPerson,
-        totalAmount: payload.totalAmount !== undefined ? payload.totalAmount : existing.totalAmount,
+        totalAmount:
+          payload.totalAmount !== undefined
+            ? payload.totalAmount
+            : existing.totalAmount,
         discountAmount:
-          payload.discountAmount !== undefined ? payload.discountAmount : existing.discountAmount,
+          payload.discountAmount !== undefined
+            ? payload.discountAmount
+            : existing.discountAmount,
         //new h
-        addOnsTotal: payload.addOnsTotal !== undefined ? payload.addOnsTotal : existing.addOnsTotal,
-        finalAmount: payload.finalAmount !== undefined ? payload.finalAmount : existing.finalAmount,
+        addOnsTotal:
+          payload.addOnsTotal !== undefined
+            ? payload.addOnsTotal
+            : existing.addOnsTotal,
+        finalAmount:
+          payload.finalAmount !== undefined
+            ? payload.finalAmount
+            : existing.finalAmount,
+        taxPercent:
+          payload.taxPercent !== undefined
+            ? payload.taxPercent
+            : existing.taxPercent,
       };
       computeAmounts(tempDoc);
       if (update.$set) {
         update.$set.totalAmount = tempDoc.totalAmount;
         update.$set.finalAmount = tempDoc.finalAmount;
+        update.$set.taxAmount = tempDoc.taxAmount;
       } else {
         update.totalAmount = tempDoc.totalAmount;
         update.finalAmount = tempDoc.finalAmount;
+        update.taxAmount = tempDoc.taxAmount;
       }
     }
 

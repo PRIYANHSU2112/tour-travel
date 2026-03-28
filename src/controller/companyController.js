@@ -25,6 +25,7 @@ class CompanyController {
         return company;
     }
     async updateCompany(payload) {
+        console.log(payload)
 
         return this.model.updateOne(
             { $set: payload }
@@ -47,7 +48,8 @@ class CompanyController {
             helpAndSupport: "testing help and support",
             address: "testing address",
             favIcon: "testing favicon",
-            loader: "testing loader"
+            loader: "testing loader",
+            companyTiming: "9:00 AM - 6:00 PM"
         }
         return companyData
     }

@@ -35,8 +35,7 @@ class GuideController {
             status,
             idProof,
             gender,
-            registrationNumber,
-            profileImage
+            registrationNumber
         } = payload;
 
         const existingGuide = await this.model.findOne({
@@ -74,8 +73,7 @@ class GuideController {
             performance,
             gender,
             status: status || 'Pending',
-            createdBy,
-            profileImage
+            createdBy
         });
 
         return newGuide;
@@ -120,6 +118,7 @@ class GuideController {
         if (filters.search && filters.search.trim()) {
             const searchRegex = new RegExp(filters.search.trim(), 'i');
             normalizedFilter.$or = [
+                { fullName: searchRegex },
                 { firstName: searchRegex },
                 { lastName: searchRegex },
                 { email: searchRegex }

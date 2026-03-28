@@ -102,9 +102,9 @@ function validateAssociation(doc) {
   if (!doc.tourId && !doc.bookingId) {
     throw new Error("Either tourId or bookingId must be provided for guide allocation.");
   }
-  // if (doc.tourId && doc.bookingId) {
-  //   throw new Error("Provide only one of tourId or bookingId for guide allocation.");
-  // }
+  if (doc.tourId && doc.bookingId) {
+    throw new Error("Provide only one of tourId or bookingId for guide allocation.");
+  }
 }
 
 guideAllocationSchema.pre("save", function (next) {

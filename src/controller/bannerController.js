@@ -28,7 +28,7 @@ class BannerController {
   }
 
   async getAllBanners(options = {}, filter = {}) {
-    const { page = 1, limit = DEFAULT_PAGE_SIZE, type, isDisabled } = options;
+    const { page = 1, limit = DEFAULT_PAGE_SIZE, type, isDisabled, role } = options;
     const parsedPage = parseInt(page, 10);
     const parsedLimit = parseInt(limit, 10);
 
@@ -38,6 +38,12 @@ class BannerController {
     if (type) normalisedFilter.type = type;
     if (isDisabled !== undefined) normalisedFilter.isDisabled = isDisabled;
 
+    if (role) {
+      normalisedFilter.role = role;
+    } else {
+      normalisedFilter.role = "All";
+    }
+    console.log(normalisedFilter)
     // const banners = await this.model
     //     .find(normalisedFilter)
     //     .skip((currentPage - 1) * pageSize)
@@ -47,7 +53,7 @@ class BannerController {
 
     const banners = await this.model.aggregate([
       { $match: normalisedFilter },
-     
+
       {
         $group: {
           _id: "$type",
@@ -61,10 +67,10 @@ class BannerController {
       },
 
       {
-        $set:{
-          banners:{
-            $slice:[
-              {$sortArray:{input:"$banners",sortBy:{displayOrder:1}}},
+        $set: {
+          banners: {
+            $slice: [
+              { $sortArray: { input: "$banners", sortBy: { displayOrder: 1 } } },
               5
             ]
           }
@@ -79,7 +85,7 @@ class BannerController {
     const totalItems = await this.model.countDocuments(normalisedFilter);
     const totalPages = Math.max(Math.ceil(totalItems / pageSize) || 1, 1);
 
-    
+
 
     return {
       data: banners,

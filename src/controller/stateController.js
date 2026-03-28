@@ -1,7 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const stateModel = require("../models/stateModel");
 
-const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || "20", 10);
+const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || "100", 10);
 
 class StateController {
   constructor(model = stateModel) {
@@ -16,25 +16,25 @@ class StateController {
   async getStates(filter = {}, options = {}) {
     const normalizedFilter = { ...filter };
 
-       if (Object.prototype.hasOwnProperty.call(normalizedFilter, "countryId")) {
-          const value = normalizedFilter.countryId;
-          if (value && mongoose.Types.ObjectId.isValid(value)) {
-            normalizedFilter.countryId = new mongoose.Types.ObjectId(value);
-          } else {
-            delete normalizedFilter.countryId;
-          }
-        }
+    if (Object.prototype.hasOwnProperty.call(normalizedFilter, "countryId")) {
+      const value = normalizedFilter.countryId;
+      if (value && mongoose.Types.ObjectId.isValid(value)) {
+        normalizedFilter.countryId = new mongoose.Types.ObjectId(value);
+      } else {
+        delete normalizedFilter.countryId;
+      }
+    }
 
-        if (Object.prototype.hasOwnProperty.call(normalizedFilter, "search")) {
-              const value = normalizedFilter.search;
-              if (value && value.trim()) {
-                const regex = { $regex: value.trim(), $options: "i" };
-                normalizedFilter.$or = [
-                  { stateName: regex },
-                ];
-              }
-              delete normalizedFilter.search;
-            }
+    if (Object.prototype.hasOwnProperty.call(normalizedFilter, "search")) {
+      const value = normalizedFilter.search;
+      if (value && value.trim()) {
+        const regex = { $regex: value.trim(), $options: "i" };
+        normalizedFilter.$or = [
+          { stateName: regex },
+        ];
+      }
+      delete normalizedFilter.search;
+    }
     if (Object.prototype.hasOwnProperty.call(normalizedFilter, "isDisabled")) {
       const raw = normalizedFilter.isDisabled;
       if (typeof raw === "string") {
@@ -52,6 +52,12 @@ class StateController {
       }
     }
 
+    const parsedPage = parseInt(options.page, 10);
+    const parsedLimit = parseInt(options.limit, 10);
+
+    const pageSize = !Number.isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : DEFAULT_PAGE_SIZE;
+    const currentPage = !Number.isNaN(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+
     const query = this.model.find(normalizedFilter).populate("countryId");
 
     let sort = options.sort || options.sortBy;
@@ -64,12 +70,28 @@ class StateController {
     if (!sort) {
       sort = { stateName: 1 };
     }
-
+    console.log(parsedLimit)
     query.sort(sort);
+    query.skip((currentPage - 1) * pageSize).limit(pageSize);
 
-    const items = await query.exec();
+    const [items, totalItems] = await Promise.all([
+      query.exec(),
+      this.model.countDocuments(normalizedFilter),
+    ]);
 
-    return items;
+    const totalPages = Math.max(Math.ceil(totalItems / pageSize) || 1, 1);
+
+    return {
+      data: items,
+      pagination: {
+        totalItems,
+        totalPages,
+        pageSize,
+        currentPage,
+        hasNextPage: currentPage < totalPages,
+        hasPrevPage: currentPage > 1,
+      },
+    };
   }
 
   async getStateById(id) {

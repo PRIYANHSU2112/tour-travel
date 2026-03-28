@@ -1,77 +1,84 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const galleryModel = new mongoose.Schema({
-    // packageId: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'Package',
-    //     default: null
-    // },
-    // tourId: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'Tour',
-    //     default: null
-    // },
-    stateId:{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'State',
-        default: null
+const galleryModel = new mongoose.Schema(
+  {
+    packageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Package",
+      default: null,
+    },
+    tourId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tour",
+      default: null,
+    },
+    stateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "State",
+      default: null,
     },
     banner: {
-        type: String,
-        trim: true,
+      type: String,
+      trim: true,
     },
-    images: [{
+    images: [
+      {
         url: {
-            type: String,
-            required: true,
-            trim: true
+          type: String,
+          required: true,
+          trim: true,
         },
         caption: {
-            type: String,
-            trim: true
+          type: String,
+          trim: true,
         },
         altText: {
-            type: String,
-            trim: true
+          type: String,
+          trim: true,
         },
         order: {
-            type: Number,
-            default: 0
-        }
-    }],
-     videos: [{
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
+    videos: [
+      {
         url: {
-            type: String,
-            required: true,
-            trim: true
+          type: String,
+          required: true,
+          trim: true,
         },
         title: {
-            type: String,
-            trim: true
+          type: String,
+          trim: true,
         },
         description: {
-            type: String,
-            trim: true
+          type: String,
+          trim: true,
         },
         thumbnail: {
-            type: String,
-            trim: true
+          type: String,
+          trim: true,
         },
-       
+
         duration: {
-            type: String,
-            trim: true
+          type: String,
+          trim: true,
         },
         order: {
-            type: Number,
-            default: 0
-        }
-    }],
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
     isDisabled: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
-}, { timestamps: true });
+  },
+  { timestamps: true },
+);
 
 galleryModel.index({ packageId: 1 });
 galleryModel.index({ tourId: 1 });

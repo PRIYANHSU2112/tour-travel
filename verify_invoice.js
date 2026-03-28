@@ -1,5 +1,4 @@
-const InvoiceHelper = require('./src/utils/invoiceHelper');
-const pdf = require('html-pdf-node');
+const InvoiceService = require('./src/services/invoiceService');
 const fs = require('fs');
 const path = require('path');
 
@@ -40,18 +39,9 @@ const mockBooking = {
 
 async function generateTestInvoice() {
     try {
-        console.log('Generating invoice HTML...');
-        const html = InvoiceHelper.getInvoiceHTML(mockBooking);
-
-        console.log('Generating PDF...');
-        const file = { content: html };
-        const options = {
-            format: 'A4',
-            printBackground: true,
-            margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
-        };
-
-        const pdfBuffer = await pdf.generatePdf(file, options);
+        console.log('Generating invoice PDF via Puppeteer...');
+        const invoiceService = new InvoiceService();
+        const pdfBuffer = await invoiceService.generatePDFBuffer(mockBooking);
 
         const outputPath = path.join(__dirname, 'test_invoice.pdf');
         fs.writeFileSync(outputPath, pdfBuffer);

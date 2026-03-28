@@ -26,6 +26,14 @@ router.post("/", protect, async (req, res) => {
   }
 });
 
+router.get("/export-allocations/excel", protect, async (req, res) => {
+  try {
+    await guideAllocationController.exportGuideAllocationsExcel(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get("/", protect, async (req, res) => {
   try {
     const { page, limit, sort,sortOrder, ...filters } = req.query;

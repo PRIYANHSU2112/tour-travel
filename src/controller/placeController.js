@@ -70,12 +70,12 @@ class PlaceController {
       const raw = normalizedFilter.isDisabled;
       if (raw === 'true') {
         normalizedFilter.isDisabled = true;
-      } else if (raw=== 'false') {
+      } else if (raw === 'false') {
         normalizedFilter.isDisabled = false
-      }else{
+      } else {
         delete normalizedFilter.isDisabled
       }
-      
+
     } else {
 
       if (options.isDisabled === 'true') {
@@ -87,10 +87,11 @@ class PlaceController {
     }
     console.log(normalizedFilter)
 
+    let searchValue = null;
     if (Object.prototype.hasOwnProperty.call(normalizedFilter, "search")) {
       const value = normalizedFilter.search;
       if (value && value.trim()) {
-        normalizedFilter.placeName = { $regex: value.trim(), $options: "i" };
+        searchValue = value.trim();
       }
       delete normalizedFilter.search;
     }
@@ -135,6 +136,14 @@ class PlaceController {
         },
         { $unwind: '$city' },
         ...(countryId ? [{ $match: { "city.countryId": countryId } }] : []),
+        ...(searchValue ? [{
+          $match: {
+            $or: [
+              { placeName: { $regex: searchValue, $options: "i" } },
+              { "city.cityName": { $regex: searchValue, $options: "i" } }
+            ]
+          }
+        }] : []),
         {
           $lookup: {
             from: 'packages',

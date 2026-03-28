@@ -28,11 +28,12 @@ router.get("/", async (req, res) => {
       order,
       includeDisabled,
     });
-   console.log(states,"states")
+
     res.status(200).json({
       success: true,
       message: "States fetched successfully",
-      data: states,
+      data: states.data,
+      pagination: states.pagination,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

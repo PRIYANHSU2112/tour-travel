@@ -5,7 +5,8 @@ const multerS3 = require("multer-s3");
 const s3Client = new S3Client({
   region: process.env.LINODE_OBJECT_STORAGE_REGION || "in-maa-1",
   endpoint:
-    process.env.LINODE_OBJECT_STORAGE_ENDPOINT || "https://in-maa-1.linodeobjects.com",
+    process.env.LINODE_OBJECT_STORAGE_ENDPOINT ||
+    "https://in-maa-1.linodeobjects.com",
   forcePathStyle: false,
   credentials: {
     accessKeyId: process.env.LINODE_OBJECT_STORAGE_ACCESS_KEY_ID,
@@ -43,7 +44,8 @@ const upload = multer({
 });
 
 const uploadSingle = (fieldName) => upload.single(fieldName);
-const uploadArray = (fieldName, maxCount = 5) => upload.array(fieldName, maxCount);
+const uploadArray = (fieldName, maxCount = 5) =>
+  upload.array(fieldName, maxCount);
 const uploadFields = (fields = []) => upload.fields(fields);
 const uploadAny = () => upload.any();
 
@@ -55,7 +57,7 @@ const deleteFileFromObjectStorage = async (url) => {
     new DeleteObjectCommand({
       Bucket: process.env.LINODE_OBJECT_BUCKET || "leadkart",
       Key: key,
-    })
+    }),
   );
 };
 

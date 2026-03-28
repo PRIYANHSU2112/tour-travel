@@ -253,10 +253,10 @@ const packageSchema = new mongoose.Schema(
       default: false,
     },
     ratings: {
-      location: { type: Number, default: 1 },
-      price: { type: Number, default: 1 },
-      services: { type: Number, default: 1 },
-      averageRating: { type: Number, default: 1 },
+      location: { type: Number, default: 0 },
+      price: { type: Number, default: 0 },
+      services: { type: Number, default: 0 },
+      averageRating: { type: Number, default: 0 },
       totalReviews: { type: Number, default: 0 }
     },
     highlights: {
@@ -295,7 +295,7 @@ function generateUniqueCode(prefix = "BK") {
 packageSchema.pre("save", async function (next) {
   try {
 
-       if (!this.placeIdUnique) {
+    if (!this.placeIdUnique) {
       const package = this.constructor;
       const rawId = generateUniqueCode("PK");
       this.packageIdUnique = await ensureUniqueField(package, "packageIdUnique", rawId);
@@ -328,11 +328,7 @@ packageSchema.pre("findOneAndUpdate", async function (next) {
     delete payload.$set;
     delete payload.$setOnInsert;
 
-
-
-
-
-
+    
     if (payload.packageName || payload.slug) {
       const Package = mongoose.model("Package");
       const rawSlug = payload.slug

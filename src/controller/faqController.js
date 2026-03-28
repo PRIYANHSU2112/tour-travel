@@ -35,12 +35,12 @@ class FaqController {
             .sort({ _id: -1 })
             .skip((currentPage - 1) * pageSize)
             .limit(pageSize);
-            
-            const [items, totalItems] = await Promise.all([
-                query.exec(),
-                this.model.countDocuments(searchQuery)
-            ]);
-            
+
+        const [items, totalItems] = await Promise.all([
+            query.exec(),
+            this.model.countDocuments(searchQuery)
+        ]);
+
         const totalPages = Math.max(Math.ceil(totalItems / pageSize) || 1, 1);
 
         return {
@@ -65,7 +65,7 @@ class FaqController {
     }
 
     async deleteFaq(id) {
-        return this.model.findByIdAndUpdate(id, { isActive: false }, { new: true });
+        return this.model.findByIdAndDelete(id);
     }
 }
 

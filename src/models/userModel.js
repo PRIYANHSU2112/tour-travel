@@ -1,8 +1,36 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const userRoles = ["Admin", "Agent", "Traveler", "Guest"];
+const userRoles = ["Admin", "SubAdmin", "Agent", "Traveler", "Guest", "Distributor"];
 const userStatuses = ["Active", "Inactive", "Pending"];
+const userPermissions = [
+  "dashboard",
+  "userManagement",
+  "distrbutorManagement",
+  "distributorMoneyRequest",
+  "withdrawManagement",
+  "agentManagement",
+  "subAdminManagement",
+  "bookingManagement",
+  "tourGuideManagement",
+  "packageManagement",
+  "cityManagement",
+  "placeManagement",
+  "groupTourCreation",
+  "gallery",
+  "guideAllocationAndTransfer",
+  "leadManagement",
+  "bannerManagement",
+  "companyManagement",
+  "contactUsManagement",
+  "aboutUsPage",
+  "subadmin",
+  "distributor",
+  "distributorDashboard",
+  "agentBannerManagement",
+  "faqManagement",
+  "agentRequest"
+];
 
 const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || "10", 10);
 
@@ -104,31 +132,70 @@ const userSchema = new mongoose.Schema(
       ref: "User",
     },
     address: {
-        country: { type: String,trim:true},
-        city: { type: String,trim:true},
-        state:  { type: String,trim:true},
-        postalCode: { type: String,trim:true}
-       
+      country: { type: String, trim: true },
+      city: { type: String, trim: true },
+      state: { type: String, trim: true },
+      postalCode: { type: String, trim: true }
     },
+    permissions: [{
+      type: String,
+      trim: true,
+      enum: userPermissions
+    }],
+    distributorCommission: {
+      type: Number,
+      default: 0
+    },
+    paidAgentCommission: {
+      type: Number,
+      default: 0
+    },
+    paidAgentFee: {
+      type: Number,
+      default: 0
+    },
+    agentAmount: {
+      type: Number,
+      default: 0
+    },
+    wallet: {
+      type: Number,
+      default: 0
+    },
+    credit_money: {
+      type: Number,
+      default: 0
+    },
+    bankDetails: {
+      accountNumber: String,
+      bankName: String,
+      ifscCode: String,
+      accountHolderName: String
+    },
+    upiId: {
+      type: String,
+      trim: true
+    },
+   
 
   },
   { timestamps: true }
 );
-userSchema.virtual('agents',{
-  ref: 'Agent',        
-  localField: '_id',       
-  foreignField: 'userId',  
-  justOne: true            
+userSchema.virtual('agents', {
+  ref: 'Agent',
+  localField: '_id',
+  foreignField: 'userId',
+  justOne: true
 })
 userSchema.virtual("fullName").get(function () {
   return [this.firstName, this.lastName].filter(Boolean).join(" ");
 });
 
 userSchema.virtual('wishlist', {
-  ref: 'Wishlist',        
-  localField: '_id',       
-  foreignField: 'userId',  
-  justOne: true           
+  ref: 'Wishlist',
+  localField: '_id',
+  foreignField: 'userId',
+  justOne: true
 });
 
 
@@ -161,6 +228,7 @@ userSchema.pre("save", async function (next) {
     if (!this.isModified("password")) {
       return next();
     }
+    console.log("inside here", this.password)
 
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
     this.password = await bcrypt.hash(this.password, salt);
@@ -177,18 +245,26 @@ userSchema.pre("findOneAndUpdate", async function (next) {
       return next();
     }
 
-    const payload = update.$set ? update.$set : update;
-
-    if (payload.password) {
+    const payload = update;
+    console.log("payload", payload)
+    if (payload.password && payload.password.trim() !== '') {
       const salt = await bcrypt.genSalt(SALT_ROUNDS);
       const hashed = await bcrypt.hash(payload.password, salt);
+      console.log("inside the payload password", payload)
 
-      if (update.$set) {
+      if (update.$set?.password) {
         update.$set.password = hashed;
       } else {
         update.password = hashed;
       }
+
+      this.setUpdate(update);
+    } else if (payload.password === '') {
+      if (update.$set) delete update.$set.password;
+      else delete update.password;
+      this.setUpdate(update);
     }
+    console.log("inside find one ", update)
 
     return next();
   } catch (error) {
@@ -206,4 +282,5 @@ module.exports = {
   userModel,
   userRoles,
   userStatuses,
+  userPermissions,
 };

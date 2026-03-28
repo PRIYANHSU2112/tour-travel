@@ -1,5 +1,9 @@
 const app = require('./src/app')
+const { initTourScheduler } = require('./src/services/tourScheduler');
 
-app.listen(4000 , ()=>{
-    console.log("connect to port number 4000");
+// Initialize background tasks
+initTourScheduler();
+
+app.listen(14000, () => {
+    console.log("connect to port number 14000");
 })

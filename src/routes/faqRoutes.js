@@ -6,7 +6,7 @@ const { protect } = require("../middleware/authMiddleware");
 const router = express.Router();
 const faqController = new FaqController(faqModel);
 
-router.post("/",protect, async (req, res) => {
+router.post("/", protect, async (req, res) => {
     try {
         const faq = await faqController.createFaq(req.body);
         res.status(201).json({
@@ -23,7 +23,7 @@ router.get("/", async (req, res) => {
     try {
         const { page, limit, sort, ...filters } = req.query;
         const faqs = await faqController.getFaqs({ page, limit, sort }, filters);
-        
+
         res.status(200).json({
             success: true,
             data: faqs,
@@ -38,7 +38,7 @@ router.get("/:id", async (req, res) => {
     try {
         const { id } = req.params;
         const faq = await faqController.getFaqById(id);
-        
+
         if (!faq) {
             return res.status(404).json({ success: false, message: "FAQ not found" });
         }
@@ -53,11 +53,11 @@ router.get("/:id", async (req, res) => {
     }
 });
 
-router.put("/:id",protect, async (req, res) => {
+router.put("/:id", protect, async (req, res) => {
     try {
         const { id } = req.params;
         const faq = await faqController.updateFaq(id, req.body);
-        
+
         if (!faq) {
             return res.status(404).json({ success: false, message: "FAQ not found" });
         }
@@ -72,11 +72,11 @@ router.put("/:id",protect, async (req, res) => {
     }
 });
 
-router.delete("/:id",protect, async (req, res) => {
+router.delete("/:id", protect, async (req, res) => {
     try {
         const { id } = req.params;
         const faq = await faqController.deleteFaq(id);
-        
+
         if (!faq) {
             return res.status(404).json({ success: false, message: "FAQ not found" });
         }

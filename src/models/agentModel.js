@@ -27,7 +27,7 @@ const agentSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    userId:{
+    userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
@@ -129,14 +129,36 @@ const agentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    verificationStatus:{
-      type:String,
-      enum:['Pending','Verified','Rejected'],
-      default:'Pending'
+    verificationStatus: {
+      type: String,
+      enum: ['Pending', 'Verified', 'Rejected'],
+      default: 'Pending'
     },
-    wallet:{
-      type:Number,
-      default:0
+    wallet: {
+      type: Number,
+      default: 0
+    },
+    bankDetails: {
+      accountNumber: String,
+      bankName: String,
+      ifscCode: String,
+      accountHolderName: String
+    },
+    upiId: {
+      type: String,
+      trim: true
+    },
+    agentAmount: {
+      type: Number,
+      default: 0
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    isPaid: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }

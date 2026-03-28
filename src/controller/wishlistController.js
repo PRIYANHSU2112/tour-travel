@@ -7,7 +7,7 @@ class WishlistController {
         this.model = model;
     }
     async addWishlist(payload) {
-        const { userId, placeId, packageId } = payload
+        const { userId, placeId, packageId, tourId } = payload
 
         let wishlistDocument = await this.model.findOne({ userId })
 
@@ -15,7 +15,8 @@ class WishlistController {
             wishlistDocument = await this.model.create({
                 userId,
                 placeId: placeId ? [placeId] : [],
-                packageId: packageId ? [packageId] : []
+                packageId: packageId ? [packageId] : [],
+                tourId: tourId ? [tourId] : []
             })
             return wishlistDocument
         }

@@ -13,7 +13,7 @@ const orderSchema = new mongoose.Schema({
     index: true
   },
   bookingIds: [{
-    type: String,   
+    type: String,
     required: true
   }],
   totalAmount: {
@@ -55,7 +55,7 @@ const { bookingModel } = require('./bookingModel');
 //   }
 //   next();
 // });
-orderSchema.methods.cancelWithBookings = async function(session) {
+orderSchema.methods.cancelWithBookings = async function (session) {
   this.orderStatus = 'Cancelled';
   this.cancelledAt = new Date();
   this.cancellationReason = 'New order created';

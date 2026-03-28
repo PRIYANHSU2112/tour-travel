@@ -14,12 +14,24 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.get("/export-leads/excel", async (req, res) => {
+  try {
+    await leadController.exportLeadsExcel(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get("/", async (req, res) => {
   try {
     const { page, limit, sort, ...filters } = req.query;
-    const leadsQuery = await leadController.getLeads(filters, { page, limit, sort });
-    const leads = await leadsQuery;
-    res.status(200).json({ success: true, message: "Leads fetched successfully", data: leads });
+    const { data, pagination } = await leadController.getLeads(filters, { page, limit, sort });
+    res.status(200).json({
+      success: true,
+      message: "Leads fetched successfully",
+      data,
+      pagination,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

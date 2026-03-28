@@ -1,9 +1,11 @@
 const InvoiceService = require('../services/invoiceService');
 const { bookingModel } = require('../models/bookingModel');
+const WhatsAppService = require('../services/whatsappService');
 
 class InvoiceController {
   constructor() {
     this.invoiceService = new InvoiceService();
+    this.whatsappService = new WhatsAppService();
   }
 
    generateInvoice=async (req, res)=> {
@@ -255,6 +257,68 @@ class InvoiceController {
       res.status(500).json({
         success: false,
         message: error.message || 'Failed to get invoices'
+      });
+    }
+  }
+
+  async sendInvoiceWhatsApp(req, res) {
+    try {
+      const { bookingId } = req.params;
+      const { phone } = req.body;
+
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number is required'
+        });
+      }
+
+      const booking = await bookingModel
+        .findById(bookingId)
+        .populate('selectedPackageId')
+        .populate('selectedTourId')
+        .populate('cityId')
+        .populate('assignedAgent', 'firstName lastName email');
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: 'Booking not found'
+        });
+      }
+
+      if (!booking.invoiceUrl) {
+        return res.status(404).json({
+          success: false,
+          message: 'Invoice not generated yet'
+        });
+      }
+
+      // Send invoice as document via WhatsApp
+      const result = await this.whatsappService.sendMessage(phone, {
+        documentUrl: booking.invoiceUrl,
+        documentName: `Invoice_${booking.invoiceNumber}.pdf`
+      });
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: 'Invoice sent via WhatsApp successfully',
+          data: result.data
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to send invoice via WhatsApp',
+          error: result.error
+        });
+      }
+
+    } catch (error) {
+      console.error('Error sending invoice via WhatsApp:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to send invoice via WhatsApp'
       });
     }
   }

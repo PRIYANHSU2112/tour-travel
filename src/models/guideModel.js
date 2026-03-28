@@ -49,7 +49,6 @@ const guideSchema = new mongoose.Schema({
     }],
     specializations: [{
         type: String,
-        enum: ['Historical', 'Adventure', 'Cultural', 'Wildlife', 'Culinary', 'Photography', 'Eco-Tourism', 'Religious', 'Architecture', 'Other'],
         trim: true
     }],
     experience: {
