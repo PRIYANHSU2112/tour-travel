@@ -274,6 +274,18 @@ class BookingController {
       },
     );
   }
+  async getBookingInvoiceUrlById(bookingId) {
+
+    let booking = await this.model
+      .findOne({ bookingId: bookingId })
+      .populate("selectedPackageId")
+      .populate("selectedTourId")
+      .populate("cityId")
+      .populate("assignedAgent", "invoiceUrl");
+
+    return booking;
+  }
+
   async deleteBooking(id) {
     return this.model.findByIdAndDelete(id);
   }
@@ -543,5 +555,8 @@ class BookingController {
     }
   }
 }
+
+
+
 
 module.exports = BookingController;

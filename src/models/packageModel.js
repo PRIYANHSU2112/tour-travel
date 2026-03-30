@@ -50,10 +50,10 @@ const itinerarySchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    transportInfo: {
+    transportInfo: [{
       type: String,
       trim: true,
-    },
+    }],
   },
   { _id: false }
 );
