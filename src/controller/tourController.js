@@ -215,7 +215,7 @@ class TourController {
   }
 
   async getTourById(id) {
-    return this.model.findById(id).populate("cityId");
+    return this.model.findById(id).populate("cityId").populate({path: "tourPlaces" , select:"placeName"})
   }
 
   async getTourSeats(id) {

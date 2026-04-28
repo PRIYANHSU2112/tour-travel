@@ -13,16 +13,16 @@ const guideAllocationController = new GuideAllocationController(guideAllocationM
 router.post("/", async (req, res) => {
   try {
     const guide = await guideController.registerGuide(req.body);
-     const assignGuide=req?.body?.assignGuide;
-       if(assignGuide){
-          assignGuide.guideId=guide._id;
-        await   guideAllocationController.createAllocation(assignGuide)
-       }
+    const assignGuide = req?.body?.assignGuide;
+    if (assignGuide) {
+      assignGuide.guideId = guide._id;
+      await guideAllocationController.createAllocation(assignGuide)
+    }
 
     if (!guide) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Failed to register guide" 
+      return res.status(404).json({
+        success: false,
+        message: "Failed to register guide"
       });
     }
 
@@ -50,7 +50,7 @@ router.get("/", async (req, res) => {
       status: req.query.status,
       specialization: req.query.specialization,
       language: req.query.language,
-    //   isVerified: req.query.isVerified,
+      //   isVerified: req.query.isVerified,
       minRating: req.query.minRating,
       search: req.query.search,
     };
@@ -68,7 +68,7 @@ router.get("/", async (req, res) => {
   }
 });
 
- 
+
 
 router.get("/:guideId", async (req, res) => {
   try {
@@ -85,10 +85,10 @@ router.get("/:guideId", async (req, res) => {
   }
 });
 
-router.patch("/:guideId",protect, async (req, res) => {
+router.patch("/:guideId", protect, async (req, res) => {
   try {
     const { guideId } = req.params;
-    const updatedBy = req.body.updatedBy || req.user?._id; 
+    const updatedBy = req.body.updatedBy || req.user?._id;
 
     const guide = await guideController.updateGuide(
       guideId,
@@ -142,7 +142,7 @@ router.delete("/:guideId", async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 });
-  
+
 router.post("/complaints/:guideId", async (req, res) => {
   try {
     const { guideId } = req.params;
@@ -165,7 +165,7 @@ router.post("/complaints/:guideId", async (req, res) => {
 router.get("/complaints/:guideId", async (req, res) => {
   try {
     const { guideId } = req.params;
-    
+
     const filters = {
       status: req.query.status,
       severity: req.query.severity,
@@ -215,6 +215,6 @@ router.patch("/complaints/:guideId/:complaintId", async (req, res) => {
   }
 });
 
- 
+
 
 module.exports = router;

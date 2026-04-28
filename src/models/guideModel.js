@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const guideSchema = new mongoose.Schema({
-
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+    },
     registrationNumber: {
         type: String,
         trim: true
@@ -10,10 +13,10 @@ const guideSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
-    gender:{
-        type:String,
-        enum:['Male','Female','Other'],
-        default:'Other'
+    gender: {
+        type: String,
+        enum: ['Male', 'Female', 'Other'],
+        default: 'Other'
     },
     email: {
         type: String,

@@ -95,6 +95,7 @@ app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/benefits', require('./routes/benefitRoutes'));
 app.use('/api/rewards', require('./routes/rewardRoutes'));
+app.use('/api/yatra-loyalty', require('./routes/yatraLoyaltyRoutes'));
 
 // app.get('/.well-known/assetlinks.json', async (req, res) => {
 //   try {

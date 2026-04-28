@@ -9,19 +9,74 @@ const {
   userTypes,
 } = require("../models/bookingModel");
 const { protect } = require("../middleware/authMiddleware");
+const {
+  checkEligibilityAndGetDiscount,
+  consumeDiscount,
+  incrementCompletedYatras,
+} = require("../controller/yatraLoyaltyController");
 
 const router = express.Router();
 const bookingController = new BookingController(bookingModel);
 
 router.post("/", async (req, res) => {
   try {
-    //  req.
     console.log("Request Body:", req.body);
-    const booking = await bookingController.createBooking(req.body);
+
+    const payload = { ...req.body };
+
+    // ── Yatra Loyalty: auto-apply discount on 5th Group Tour booking ──
+    const isGroupTour = payload.bookingType === "Group Tour";
+    const userId = payload.userId;
+    let loyaltyDiscountApplied = null;
+
+    if (isGroupTour && userId) {
+      const eligibility = await checkEligibilityAndGetDiscount(userId);
+      if (eligibility.isEligible) {
+        loyaltyDiscountApplied = eligibility;
+        // Discount will be applied; totalAmount is computed by the pre-save hook.
+        // We set discountAmount here so computeAmounts() factors it in.
+        if (eligibility.discountType === "free") {
+          // Mark as free — pre-save will compute finalAmount = 0 after discount
+          payload._loyaltyFreeDiscount = true;
+        } else {
+          // Flat discount
+          const existing = payload.discountAmount || 0;
+          payload.discountAmount = existing + eligibility.discountValue;
+        }
+      }
+    }
+
+    const booking = await bookingController.createBooking(payload);
+
+    // If "free" type, set discountAmount = totalAmount after save
+    if (loyaltyDiscountApplied && loyaltyDiscountApplied.discountType === "free") {
+      await bookingController.updateBooking(booking._id, {
+        $set: { discountAmount: booking.totalAmount },
+      });
+    }
+
+    // Consume the loyalty discount record
+    if (loyaltyDiscountApplied) {
+      await consumeDiscount(
+        userId,
+        booking._id,
+        loyaltyDiscountApplied.discountType,
+        loyaltyDiscountApplied.discountType === "free"
+          ? booking.totalAmount
+          : loyaltyDiscountApplied.discountValue
+      );
+    }
+
     res.status(201).json({
       success: true,
       message: "Booking created successfully",
       data: booking,
+      loyaltyDiscountApplied: loyaltyDiscountApplied
+        ? {
+            discountType: loyaltyDiscountApplied.discountType,
+            discountValue: loyaltyDiscountApplied.discountValue,
+          }
+        : null,
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -100,6 +155,31 @@ router.get("/user", protect, async (req, res) => {
 
 router.put("/:id", protect, async (req, res) => {
   try {
+    // ── Yatra Loyalty: increment counter when Group Tour reaches Completed ──
+    if (req.body.bookingStatus === "Completed") {
+      // Fetch existing booking to check prior status and read booking details
+      const existing = await bookingController.getBookingById(req.params.id);
+
+      // Only count if the booking was NOT already Completed (prevents double-count)
+      const wasAlreadyCompleted = existing && existing.bookingStatus === "Completed";
+
+      if (
+        !wasAlreadyCompleted &&
+        existing &&
+        existing.bookingType === "Group Tour" &&
+        existing.userId &&
+        existing.numberOfTravelers > 1
+      ) {
+        // Non-blocking: loyalty update should not fail the booking update
+        incrementCompletedYatras(
+          existing.userId.toString(),
+          existing._id
+        ).catch((err) =>
+          console.error("[YatraLoyalty] incrementCompletedYatras error:", err.message)
+        );
+      }
+    }
+
     const booking = await bookingController.updateBooking(
       req.params.id,
       req.body,

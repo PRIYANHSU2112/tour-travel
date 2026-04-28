@@ -1,5 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const Guide = require("../models/guideModel");
+const { userModel } = require("../models/userModel");
 const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || "20", 10);
 
 class GuideController {
@@ -9,7 +10,7 @@ class GuideController {
 
     async registerGuide(payload) {
         const {
-            fullName, 
+            fullName,
             email,
             phone,
             licenseNumber,
@@ -46,7 +47,34 @@ class GuideController {
             throw new Error('Guide with this email or license number already exists');
         }
 
+        // Check if User exists
+        let user = await userModel.findOne({
+            $or: [{ email }, { phone }],
+        });
+        if (user && user.role != 'Guide') {
+            throw new Error("Different type of user already exists with this email or phone");
+        }
+
+        if (!user) {
+            // Create new User
+            const randomPassword = Math.random().toString(36).slice(-8); // Random password
+            const firstName = fullName ? fullName.split(' ')[0] : "Guide";
+            const lastName = fullName && fullName.split(' ').length > 1 ? fullName.split(' ').slice(1).join(' ') : "User";
+            user = await userModel.create({
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+                phone: phone,
+                role: "Guide",
+                password: randomPassword,
+                status: "Active",
+                isEmailVerified: true,
+                isPhoneVerified: true
+            });
+        }
+
         const newGuide = await this.model.create({
+            userId: user._id,
             fullName,
             email,
             phone,
@@ -76,6 +104,20 @@ class GuideController {
             createdBy
         });
 
+        if (newGuide && newGuide.userId) {
+            const userUpdatePayload = {};
+            if (fullName) {
+                userUpdatePayload.firstName = fullName.split(' ')[0];
+                userUpdatePayload.lastName = fullName.split(' ').slice(1).join(' ');
+            }
+            if (Object.keys(userUpdatePayload).length > 0) {
+                await userModel.findByIdAndUpdate(newGuide.userId, userUpdatePayload, {
+                    new: true,
+                    runValidators: true,
+                });
+            }
+        }
+
         return newGuide;
     }
 
@@ -89,9 +131,10 @@ class GuideController {
         }
         if (filters.status && filters.status.trim()) {
             const validStatuses = ['Active', 'Inactive', 'Suspended', 'Pending'];
-            const status = filters.status.trim().toLowerCase();
-            if (validStatuses.includes(status)) {
-                normalizedFilter.status = status;
+            const inputStatus = filters.status.trim().toLowerCase();
+            const matchedStatus = validStatuses.find(s => s.toLowerCase() === inputStatus);
+            if (matchedStatus) {
+                normalizedFilter.status = matchedStatus;
             }
         }
 
@@ -139,7 +182,7 @@ class GuideController {
             .sort({ [sortBy]: sortOrder })
             .skip((currentPage - 1) * pageSize)
             .limit(pageSize)
-             .lean();
+            .lean();
 
         const [items, totalItems] = await Promise.all([
             query.exec(),
@@ -201,6 +244,27 @@ class GuideController {
         // updates.lastModifiedBy = updatedBy;
         updateData.lastModifiedBy = updatedBy
 
+        const currentGuide = await this.model.findById(guideId);
+        if (currentGuide && currentGuide.userId) {
+            const userUpdatePayload = {};
+            if (updateData.fullName !== undefined) {
+                userUpdatePayload.firstName = updateData.fullName.split(' ')[0];
+                userUpdatePayload.lastName = updateData.fullName.split(' ').slice(1).join(' ');
+            }
+            if (updateData.email !== undefined) {
+                userUpdatePayload.email = updateData.email;
+            }
+            if (updateData.profileImage !== undefined) {
+                userUpdatePayload.avatarUrl = updateData.profileImage;
+            }
+            if (Object.keys(userUpdatePayload).length > 0) {
+                await userModel.findByIdAndUpdate(currentGuide.userId, userUpdatePayload, {
+                    new: true,
+                    runValidators: true,
+                });
+            }
+        }
+
         const guide = await this.model.findByIdAndUpdate(
             guideId,
             { $set: updateData },
@@ -226,7 +290,7 @@ class GuideController {
             {
                 status,
                 lastModifiedBy: updatedBy,
-                ...(status === 'active' && { isVerified: true, verificationDate: new Date() })
+                ...(status === 'Active' && { isVerified: true, verificationDate: new Date() })
             },
             { new: true, runValidators: true }
         );
@@ -241,18 +305,18 @@ class GuideController {
 
 
     async addComplaint(payload) {
-        const { guideId, userId, tourId,type='Other', subject, description, severity = 'Medium' } = payload;
+        const { guideId, userId, tourId, type = 'Other', subject, description, severity = 'Medium' } = payload;
         if (!mongoose.Types.ObjectId.isValid(guideId)) {
             throw new Error('Invalid guide ID');
         }
-        
+
         const guide = await this.model.findById(guideId);
         if (!guide) {
             throw new Error('Guide not found');
         }
 
         const complaintId = new mongoose.Types.ObjectId();
-        
+
         console.log("inside complaint")
         guide.complaints.push({
             complaintId,
@@ -344,7 +408,7 @@ class GuideController {
         const paginatedComplaints = result[0].data || [];
         const totalPages = Math.max(Math.ceil(totalItems / pageSize) || 1, 1);
 
-        
+
         return {
             data: paginatedComplaints,
             pagination: {

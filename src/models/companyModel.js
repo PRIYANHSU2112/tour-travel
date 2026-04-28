@@ -21,6 +21,18 @@ const companySchema = new mongoose.Schema({
     agentPaidFee: { type: Number, default: 0 },
     agentPaidCommission: { type: Number, default: 0 },
 
+    // 5th Group Yatra Loyalty Offer config
+    yatraLoyaltyDiscountType: {
+        type: String,
+        enum: ['flat', 'free'],
+        default: 'flat',
+    },
+    yatraLoyaltyDiscountValue: {
+        type: Number,
+        default: 50,
+        min: 0,
+    },
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('Company', companySchema);
