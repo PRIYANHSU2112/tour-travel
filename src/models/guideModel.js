@@ -200,6 +200,10 @@ const guideSchema = new mongoose.Schema({
         saturday: { type: Boolean, default: true },
         sunday: { type: Boolean, default: true }
     },
+    isAvailable: {
+        type: Boolean,
+        default: true
+    },
     preferredLocations: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Place'

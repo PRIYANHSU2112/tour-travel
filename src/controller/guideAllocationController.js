@@ -1,5 +1,12 @@
 const { guideAllocationModel } = require("../models/guideAllocationModel");
 const emailService = require("../services/emailService");
+const Guide = require("../models/guideModel");
+const { bookingModel } = require("../models/bookingModel");
+const Company = require("../models/companyModel");
+const { guideWalletModel } = require("../models/guideWalletModel");
+const Transaction = require("../models/transactionModel");
+const mongoose = require("mongoose");
+
 
 class GuideAllocationController {
   constructor(model = guideAllocationModel) {
@@ -7,7 +14,6 @@ class GuideAllocationController {
   }
 
   async createAllocation(payload) {
-
     let checkOr = [];
 
     if (payload.tourId) {
@@ -18,15 +24,44 @@ class GuideAllocationController {
       checkOr.push({ bookingId: payload.bookingId });
     }
 
-    const isExist = await this.model.findOne(
-      { $or: checkOr }
-    );
+    const isExist = await this.model.findOne({ $or: checkOr });
 
-    console.log("check", isExist)
-    let allocation = []
+    // Initialize itineraryStatus if it's a new allocation or if it doesn't exist
+    if (!isExist || !isExist.itineraryStatus || isExist.itineraryStatus.length === 0) {
+      let itinerary = [];
+      if (payload.bookingId) {
+        const { bookingModel } = require("../models/bookingModel");
+        const booking = await bookingModel.findById(payload.bookingId).populate("selectedPackageId");
+        if (booking?.selectedPackageId?.itinerary) {
+          itinerary = booking.selectedPackageId.itinerary;
+        }
+      } else if (payload.tourId) {
+        const { tourModel } = require("../models/tourModel");
+        const tour = await tourModel.findById(payload.tourId).populate("packageId");
+        if (tour?.packageId?.itinerary) {
+          itinerary = tour.packageId.itinerary;
+        }
+      }
+
+      if (itinerary.length > 0) {
+        payload.itineraryStatus = itinerary.map((item) => ({
+          dayNumber: item.dayNumber,
+          dayTitle: item.dayTitle,
+          status: "Pending",
+        }));
+      }
+    }
+
+    let allocation;
     if (isExist) {
+      // Preserve itineraryStatus if it already exists
+      const updateData = { ...payload };
+      if (isExist.itineraryStatus && isExist.itineraryStatus.length > 0) {
+        delete updateData.itineraryStatus;
+      }
+
       allocation = await this.model
-        .findOneAndReplace({ _id: isExist._id }, payload, { new: true })
+        .findOneAndUpdate({ _id: isExist._id }, updateData, { new: true, runValidators: true })
         .populate("guideId", "fullName email");
     } else {
       allocation = await this.model.create(payload);
@@ -64,7 +99,6 @@ class GuideAllocationController {
 
   async getAllocations(filter = {}, options = {}) {
     if (filter.search) {
-      const Guide = require("../models/guideModel");
       const { tourModel } = require("../models/tourModel");
 
       const [guides, tours] = await Promise.all([
@@ -140,6 +174,52 @@ class GuideAllocationController {
     return this.model.findByIdAndDelete(id);
   }
 
+  async getAllocationsByGuideUserId(userId, filter = {}, options = {}) {
+
+    const guide = await Guide.findOne({ userId });
+    console.log("guide" + guide);
+
+    if (!guide) {
+      throw new Error("Guide profile not found for this user");
+    }
+    filter.guideId = guide._id;
+    console.log("guideId" + filter.guideId);
+    const query = this.model
+      .find(filter)
+      .populate("guideId", "fullName email phone")
+      .populate("tourId")
+      .populate("bookingId")
+      .populate("assignedBy", "firstName lastName email");
+
+    console.log("query" + query);
+
+    let sort = options.sort || options.sortBy;
+    if (typeof sort === "string" && sort.trim()) {
+      const order = options.sortOrder || options.order;
+      const direction = typeof order === "string" && order.toLowerCase() === "desc" ? -1 : 1;
+      query.sort({ [sort]: direction });
+    } else {
+      query.sort({ createdAt: -1 });
+    }
+
+    if (options.limit) {
+      const limit = parseInt(options.limit, 10);
+      if (!Number.isNaN(limit)) {
+        query.limit(limit);
+      }
+    }
+
+    if (options.page && options.limit) {
+      const page = Math.max(parseInt(options.page, 10), 1);
+      const limit = parseInt(options.limit, 10);
+      if (!Number.isNaN(page) && !Number.isNaN(limit)) {
+        query.skip((page - 1) * limit);
+      }
+    }
+
+    return query;
+  }
+
   async exportGuideAllocationsExcel(req, res) {
     let tempFilePath = null;
     const fs = require("fs");
@@ -168,12 +248,12 @@ class GuideAllocationController {
 
       const allKeys = new Set();
       allocations.forEach((a) => Object.keys(a).forEach((k) => allKeys.add(k)));
-      
+
       allKeys.add("GuideName");
       allKeys.add("TourName");
       allKeys.add("BookingID");
       allKeys.add("AssignedBy");
-      
+
       const keysArray = Array.from(allKeys);
 
       worksheet.columns = keysArray.map((key) => ({
@@ -193,7 +273,7 @@ class GuideAllocationController {
         const rowData = {};
         keysArray.forEach((key) => {
           let val = a[key];
-          
+
           if (key === "GuideName") {
             val = a.guideId ? a.guideId.fullName : "-";
           } else if (key === "TourName") {
@@ -205,7 +285,7 @@ class GuideAllocationController {
           } else if ((key === "guideId" || key === "tourId" || key === "bookingId" || key === "assignedBy") && typeof val === "object") {
             val = val._id ? val._id.toString() : "-";
           }
-          
+
           if (val === null || val === undefined) {
             rowData[key] = "-";
           } else if (val instanceof Date) {
@@ -244,13 +324,13 @@ class GuideAllocationController {
       const s3Key = `${folderPath}EXCEL/${filename}`;
 
       const uploadParams = {
-          Bucket: process.env.LINODE_OBJECT_BUCKET,
-          Key: s3Key,
-          Body: fileBuffer,
-          ACL: "public-read",
-          ContentType:
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          ContentDisposition: `attachment; filename="${filename}"`,
+        Bucket: process.env.LINODE_OBJECT_BUCKET,
+        Key: s3Key,
+        Body: fileBuffer,
+        ACL: "public-read",
+        ContentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ContentDisposition: `attachment; filename="${filename}"`,
       };
 
       await s3Client.send(new PutObjectCommand(uploadParams));
@@ -263,22 +343,22 @@ class GuideAllocationController {
       tempFilePath = null;
 
       return res.status(200).json({
-          success: true,
-          message: "Guide allocations exported to Excel successfully",
-          data: {
-              fileUrl,
-              filename,
-              recordCount: allocations.length,
-              key: s3Key,
-          },
+        success: true,
+        message: "Guide allocations exported to Excel successfully",
+        data: {
+          fileUrl,
+          filename,
+          recordCount: allocations.length,
+          key: s3Key,
+        },
       });
     } catch (error) {
       if (tempFilePath && fs.existsSync(tempFilePath)) {
-          try { fs.unlinkSync(tempFilePath); } catch (e) {}
+        try { fs.unlinkSync(tempFilePath); } catch (e) { }
       }
       return res.status(500).json({
-          success: false,
-          message: error.message || "Failed to export guide allocations",
+        success: false,
+        message: error.message || "Failed to export guide allocations",
       });
     }
   }
@@ -331,12 +411,151 @@ class GuideAllocationController {
     // Send email to the new guide with allocation + tour/package info
     if (allocation.guideId?.email) {
       try {
-        const temp = await emailService.sendGuideAllocationEmail(allocation.guideId.email, allocation);
+        const temp = emailService.sendGuideAllocationEmail(allocation.guideId.email, allocation);
         // console.log("Guide transfer email sent:", temp);
       } catch (emailError) {
         // console.error("Failed to send guide transfer email:", emailError.message);
       }
     }
+
+    return allocation;
+  }
+
+  async updateItineraryDay(id, dayNumber, updateData) {
+    const allocation = await this.model.findById(id);
+    if (!allocation) {
+      throw new Error("Guide allocation not found");
+    }
+
+    if (!allocation.itineraryStatus || allocation.itineraryStatus.length === 0) {
+      throw new Error("No itinerary found for this allocation");
+    }
+
+    if (allocation.status !== "Active") {
+      throw new Error("Guide allocation is not active");
+    }
+
+    const day = allocation.itineraryStatus.find((d) => d.dayNumber === parseInt(dayNumber, 10));
+    if (!day) {
+      throw new Error(`Day ${dayNumber} not found in itinerary`);
+    }
+
+    if (updateData.status) {
+      day.status = updateData.status;
+      if (updateData.status === "Completed") {
+        day.completedAt = new Date();
+      }
+    }
+
+    if (updateData.notes !== undefined) {
+      day.notes = updateData.notes;
+    }
+
+    // Check if all days are completed
+    const allCompleted = allocation.itineraryStatus.every((d) => d.status === "Completed");
+    if (allCompleted) {
+      allocation.status = "Completed";
+    }
+
+    await allocation.save();
+
+    // Auto-credit guide wallet on allocation completion
+  
+    if (allCompleted && allocation.bookingId) {
+      console.log("All days are completed, crediting guide commission");
+      try {
+        await this._creditGuideCommission(allocation);
+      } catch (commissionError) {
+        console.error("Failed to credit guide commission:", commissionError.message);
+      }
+    }
+
+    return allocation;
+  }
+
+  async _creditGuideCommission(allocation) {
+    // Parallel fetch: booking, company settings, guide, and duplicate check
+    const [booking, company, guide, existingTransaction] = await Promise.all([
+      bookingModel.findById(allocation.bookingId).lean(),
+      Company.findOne().lean(),
+      Guide.findById(allocation.guideId).lean(),
+      Transaction.findOne({ allocationId: allocation._id, category: "Guide Commission" }).lean(),
+    ]);
+
+    if (existingTransaction) return;
+    if (!booking?.totalAmount) return;
+    if (!company?.guideCommission || company.guideCommission <= 0) return;
+    if (!guide) return;
+
+    const commissionPercent = company.guideCommission;
+    const bookingAmount = booking.totalAmount;
+    const commissionAmount = Math.round((bookingAmount * commissionPercent) / 100 * 100) / 100;
+    if (commissionAmount <= 0) return;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      // Atomic upsert: find or create wallet and increment in one operation
+      await guideWalletModel.findOneAndUpdate(
+        { guideId: allocation.guideId },
+        { $inc: { balance: commissionAmount, totalEarnings: commissionAmount } },
+        { upsert: true, session }
+      );
+
+      // Create transaction record
+      await Transaction.create(
+        [
+          {
+            userId: guide.userId,
+            guideId: allocation.guideId,
+            allocationId: allocation._id,
+            bookingId: allocation.bookingId,
+            amount: commissionAmount,
+            type: "Credit",
+            category: "Guide Commission",
+            status: "Completed",
+            commissionPercent,
+            bookingAmount,
+            description: `Guide commission ${commissionPercent}% on booking ${booking.bookingId || booking._id} — ₹${bookingAmount} × ${commissionPercent}% = ₹${commissionAmount}`,
+            createdBy: guide.userId,
+          },
+        ],
+        { session }
+      );
+
+      await session.commitTransaction();
+      console.log(`Guide commission ₹${commissionAmount} credited to guide ${guide.fullName}`);
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  async updateAllocationStatus(id, payload, user) {
+    const { status } = payload;
+    const allocation = await this.model.findById(id);
+
+    if (!allocation) {
+      throw new Error("Guide allocation not found");
+    }
+
+    if (user.role === "Guide") {
+      const guide = await Guide.findOne({ userId: user.userId });
+
+      if (!guide || allocation.guideId.toString() !== guide._id.toString()) {
+        throw new Error("You are not authorized to update this allocation status");
+      }
+
+      // Business Logic: if status is Active, guide cannot Cancel
+      if (allocation.status === "Active" && status === "Cancelled") {
+        throw new Error("You cannot cancel an allocation that is already active");
+      }
+    }
+
+    allocation.status = status;
+    await allocation.save();
 
     return allocation;
   }
