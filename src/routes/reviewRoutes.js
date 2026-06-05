@@ -48,6 +48,7 @@ router.get("/", async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 });
+
 router.delete("/:userId/:placeId", protect, async (req, res) => {
   try {
     const { userId, placeId } = req.params;

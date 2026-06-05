@@ -2,6 +2,7 @@ const express = require("express");
 const GuideController = require("../controller/guideController");
 const Guide = require("../models/guideModel");
 const { protect } = require("../middleware/authMiddleware");
+const { uploadFields } = require("../middleware/s3Upload");
 const GuideAllocationController = require("../controller/guideAllocationController");
 const {
   guideAllocationModel,
@@ -10,8 +11,35 @@ const router = express.Router();
 const guideController = new GuideController(Guide);
 const guideAllocationController = new GuideAllocationController(guideAllocationModel);
 
-router.post("/", async (req, res) => {
+// Multer middleware for guide document uploads
+const guideDocUpload = uploadFields([
+  { name: "passportImage", maxCount: 1 },
+  { name: "guideLicenseImage", maxCount: 1 },
+  { name: "aidCertificateImage", maxCount: 1 },
+  { name: "proofOfAddressImage", maxCount: 1 },
+]);
+
+router.post("/", guideDocUpload, async (req, res) => {
   try {
+    // Map uploaded files to documents payload
+    const docFields = ['passportImage', 'guideLicenseImage', 'aidCertificateImage', 'proofOfAddressImage'];
+    const documents = {};
+    for (const field of docFields) {
+      if (req.files && req.files[field] && req.files[field][0]) {
+        documents[field] = req.files[field][0].location; // S3 URL
+      }
+    }
+    // Also allow JSON URLs in body (for cases where files were pre-uploaded)
+    if (req.body.documents) {
+      const bodyDocs = typeof req.body.documents === 'string' ? JSON.parse(req.body.documents) : req.body.documents;
+      for (const field of docFields) {
+        if (!documents[field] && bodyDocs[field]) {
+          documents[field] = bodyDocs[field];
+        }
+      }
+    }
+    req.body.documents = documents;
+
     const guide = await guideController.registerGuide(req.body);
     const assignGuide = req?.body?.assignGuide;
     if (assignGuide) {
@@ -69,6 +97,30 @@ router.get("/", async (req, res) => {
 });
 
 
+// ── Get all reviews for a guide with guide info ──
+router.get("/reviews/:guideId", async (req, res) => {
+  try {
+    const { guideId } = req.params;
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit,
+      sortOrder: req.query.sortOrder,
+      rating: req.query.rating,
+    };
+
+    const result = await guideController.getGuideReviews(guideId, options);
+
+    res.status(200).json({
+      success: true,
+      guide: result.guide,
+      reviews: result.reviews,
+      pagination: result.pagination,
+      message: "Guide reviews fetched successfully",
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
 router.get("/:guideId", async (req, res) => {
   try {
@@ -215,6 +267,26 @@ router.patch("/complaints/:guideId/:complaintId", async (req, res) => {
   }
 });
 
+// ── Admin: Verify Guide Documents ──
+router.patch("/verify-documents/:guideId", protect, async (req, res) => {
+  try {
+    const { guideId } = req.params;
+    const verifiedBy = req.user?._id || req.body.verifiedBy;
 
+    const guide = await guideController.verifyGuideDocuments(
+      guideId,
+      req.body,
+      verifiedBy
+    );
+
+    res.status(200).json({
+      success: true,
+      data: guide,
+      message: "Guide documents verification updated successfully",
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
 module.exports = router;

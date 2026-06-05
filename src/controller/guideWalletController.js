@@ -205,7 +205,7 @@ exports.getGuideWithdrawals = async (req, res) => {
       guideId: guide._id,
       category: "Withdrawal",
     }).sort({ createdAt: -1 });
-
+ 
     res.status(200).json({ success: true, data: transactions });
   } catch (error) {
     console.error("Error fetching guide withdrawals:", error);

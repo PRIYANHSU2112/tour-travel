@@ -37,9 +37,8 @@ router.get("/export-allocations/excel", protect, async (req, res) => {
 router.get("/my-allocations", protect, async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log("userId"+userId);
     const { page, limit, sort, sortOrder, ...filters } = req.query;
-    const allocations = await guideAllocationController.getAllocationsByGuideUserId(userId, filters, {
+    const result = await guideAllocationController.getAllocationsByGuideUserId(userId, filters, {
       page,
       limit,
       sort,
@@ -47,7 +46,36 @@ router.get("/my-allocations", protect, async (req, res) => {
     });
     res
       .status(200)
-      .json({ success: true, message: "Guide allocations fetched successfully", data: allocations });
+      .json({
+        success: true,
+        message: "Guide allocations fetched successfully",
+        data: result.data,
+        pagination: result.pagination,
+      });
+  } catch (error) {
+    const statusCode = error.message === "Guide profile not found for this user" ? 404 : 500;
+    res.status(statusCode).json({ success: false, message: error.message });
+  }
+});
+
+router.get("/my-history", protect, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { page, limit, sort, sortOrder, ...filters } = req.query;
+    const result = await guideAllocationController.getGuideAllocationHistory(userId, filters, {
+      page,
+      limit,
+      sort,
+      sortOrder,
+    });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Guide allocation history fetched successfully",
+        data: result.data,
+        pagination: result.pagination,
+      });
   } catch (error) {
     const statusCode = error.message === "Guide profile not found for this user" ? 404 : 500;
     res.status(statusCode).json({ success: false, message: error.message });

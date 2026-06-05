@@ -177,47 +177,235 @@ class GuideAllocationController {
   async getAllocationsByGuideUserId(userId, filter = {}, options = {}) {
 
     const guide = await Guide.findOne({ userId });
-    console.log("guide" + guide);
 
     if (!guide) {
       throw new Error("Guide profile not found for this user");
     }
-    filter.guideId = guide._id;
-    console.log("guideId" + filter.guideId);
-    const query = this.model
-      .find(filter)
-      .populate("guideId", "fullName email phone")
-      .populate("tourId")
-      .populate("bookingId")
-      .populate("assignedBy", "firstName lastName email");
 
-    console.log("query" + query);
+    const guideObjectId = new mongoose.Types.ObjectId(guide._id);
 
-    let sort = options.sort || options.sortBy;
-    if (typeof sort === "string" && sort.trim()) {
-      const order = options.sortOrder || options.order;
-      const direction = typeof order === "string" && order.toLowerCase() === "desc" ? -1 : 1;
-      query.sort({ [sort]: direction });
-    } else {
-      query.sort({ createdAt: -1 });
-    }
+    // Pagination
+    const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || "20", 10);
+    const parsedPage = parseInt(options.page, 10);
+    const parsedLimit = parseInt(options.limit, 10);
+    const pageSize = !Number.isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : DEFAULT_PAGE_SIZE;
+    const currentPage = !Number.isNaN(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
-    if (options.limit) {
-      const limit = parseInt(options.limit, 10);
-      if (!Number.isNaN(limit)) {
-        query.limit(limit);
-      }
-    }
+    // Sort
+    let sortField = options.sort || options.sortBy || "createdAt";
+    const sortDirection = (options.sortOrder || options.order || "").toLowerCase() === "asc" ? 1 : -1;
 
-    if (options.page && options.limit) {
-      const page = Math.max(parseInt(options.page, 10), 1);
-      const limit = parseInt(options.limit, 10);
-      if (!Number.isNaN(page) && !Number.isNaN(limit)) {
-        query.skip((page - 1) * limit);
-      }
-    }
+    // Match filter
+    const matchFilter = { guideId: guideObjectId };
+    if (filter.status) matchFilter.status = filter.status;
+    if (filter.assignmentType) matchFilter.assignmentType = filter.assignmentType;
 
-    return query;
+    const pipeline = [
+      { $match: matchFilter },
+      { $sort: { [sortField]: sortDirection } },
+
+      // ── Lookup Tour details ──
+      {
+        $lookup: {
+          from: "tours",
+          localField: "tourId",
+          foreignField: "_id",
+          as: "tour",
+        },
+      },
+      { $unwind: { path: "$tour", preserveNullAndEmptyArrays: true } },
+
+      // ── Lookup Booking details ──
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "bookingId",
+          foreignField: "_id",
+          as: "booking",
+        },
+      },
+      { $unwind: { path: "$booking", preserveNullAndEmptyArrays: true } },
+
+      // ── Lookup Package via booking.selectedPackageId ──
+      {
+        $lookup: {
+          from: "packages",
+          localField: "booking.selectedPackageId",
+          foreignField: "_id",
+          as: "package",
+        },
+      },
+      { $unwind: { path: "$package", preserveNullAndEmptyArrays: true } },
+
+      // ── Lookup Guide Commission from Transactions ──
+      {
+        $lookup: {
+          from: "transactions",
+          let: { allocId: "$_id", gId: "$guideId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$allocationId", "$$allocId"] },
+                    { $eq: ["$guideId", "$$gId"] },
+                    { $eq: ["$category", "Guide Commission"] },
+                  ],
+                },
+              },
+            },
+            { $project: { amount: 1, commissionPercent: 1, bookingAmount: 1, status: 1 } },
+          ],
+          as: "commissionTxn",
+        },
+      },
+      { $unwind: { path: "$commissionTxn", preserveNullAndEmptyArrays: true } },
+
+      // ── Lookup Review (user rating for this guide on this tour/booking) ──
+      {
+        $lookup: {
+          from: "reviews",
+          let: {
+            gId: "$guideId",
+            tId: "$tourId",
+            bId: "$bookingId",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$guideId", "$$gId"] },
+                    {
+                      $or: [
+                        { $eq: ["$tourId", "$$tId"] },
+                        { $eq: ["$bookingId", "$$bId"] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $project: { rating: 1, review: 1, userId: 1 } },
+          ],
+          as: "reviews",
+        },
+      },
+
+      // ── Final projection ──
+      {
+        $facet: {
+          metadata: [{ $count: "totalItems" }],
+          data: [
+            { $skip: (currentPage - 1) * pageSize },
+            { $limit: pageSize },
+            {
+              $project: {
+                _id: 1,
+                assignmentType: 1,
+                status: 1,
+                startDate: 1,
+                endDate: 1,
+                isPrimaryGuide: 1,
+                notes: 1,
+                itineraryStatus: 1,
+                createdAt: 1,
+
+                // Tour / Package name
+                name: {
+                  $cond: {
+                    if: { $ifNull: ["$tour", false] },
+                    then: "$tour.tourName",
+                    else: {
+                      $cond: {
+                        if: { $ifNull: ["$package", false] },
+                        then: "$package.packageName",
+                        else: { $ifNull: ["$booking.customerName", "N/A"] },
+                      },
+                    },
+                  },
+                },
+
+                // Duration
+                durationInDays: {
+                  $cond: {
+                    if: { $ifNull: ["$tour.durationInDays", false] },
+                    then: "$tour.durationInDays",
+                    else: { $ifNull: ["$booking.durationInDays", null] },
+                  },
+                },
+
+                // Number of people
+                numberOfPeople: {
+                  $cond: {
+                    if: { $ifNull: ["$tour.totalSeats", false] },
+                    then: "$tour.totalSeats",
+                    else: { $ifNull: ["$booking.numberOfTravelers", null] },
+                  },
+                },
+
+                // Tour start date (from tour or booking travel date)
+                tourStartDate: {
+                  $cond: {
+                    if: { $ifNull: ["$tour.startDate", false] },
+                    then: "$tour.startDate",
+                    else: { $ifNull: ["$booking.travelStartDate", "$startDate"] },
+                  },
+                },
+
+                // Commission
+                commission: {
+                  amount: { $ifNull: ["$commissionTxn.amount", 0] },
+                  percent: { $ifNull: ["$commissionTxn.commissionPercent", 0] },
+                  bookingAmount: { $ifNull: ["$commissionTxn.bookingAmount", 0] },
+                  status: { $ifNull: ["$commissionTxn.status", null] },
+                },
+
+                // User rating for this allocation
+                reviews: 1,
+
+                // Tour / Booking IDs for reference
+                tourId: { $ifNull: ["$tour._id", null] },
+                bookingId: { $ifNull: ["$booking._id", null] },
+                bookingRef: { $ifNull: ["$booking.bookingId", null] },
+
+                // Tour cover image
+                coverImage: { $ifNull: ["$tour.coverImage", null] },
+
+                // Tour starting time & pickup location
+                pickupTime: { $ifNull: ["$tour.pickupTime", null] },
+                meetingPoint: { $ifNull: ["$tour.meetingPoint", null] },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = await this.model.aggregate(pipeline);
+
+    const totalItems = result[0].metadata[0]?.totalItems || 0;
+    const allocations = result[0].data || [];
+    const totalPages = Math.max(Math.ceil(totalItems / pageSize) || 1, 1);
+
+    return {
+      data: allocations,
+      pagination: {
+        totalItems,
+        totalPages,
+        pageSize,
+        currentPage,
+        hasNextPage: currentPage < totalPages,
+        hasPrevPage: currentPage > 1,
+      },
+    };
+  }
+
+x
+  async getGuideAllocationHistory(userId, filter = {}, options = {}) {
+    // Force status to Completed for history
+    filter.status = "Completed";
+    return this.getAllocationsByGuideUserId(userId, filter, options);
   }
 
   async exportGuideAllocationsExcel(req, res) {
